@@ -2,8 +2,11 @@ services:
   - type: web
     name: livedelayanalysis-backend
     runtime: node
+    plan: free
     rootDir: backend
     buildCommand: npm install
     startCommand: npm start
     healthCheckPath: /api/health
     autoDeployTrigger: commit
+    previews:
+      generation: 'off'
