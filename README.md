@@ -150,8 +150,8 @@ To create the service from the Blueprint:
 After Render deploys the service, verify that these URLs return JSON:
 
 ```text
-https://YOUR-RENDER-BACKEND-URL/api/health
-https://YOUR-RENDER-BACKEND-URL/api/status
+https://livedelayanalysis-backend.onrender.com/api/health
+https://livedelayanalysis-backend.onrender.com/api/status
 ```
 
 ### GitHub Pages Frontend
@@ -179,7 +179,7 @@ To connect the deployed frontend to the Render backend, add a repository Actions
 ```text
 Settings → Secrets and variables → Actions → Variables → New repository variable
 Name: VITE_API_BASE_URL
-Value: https://YOUR-RENDER-BACKEND-URL
+Value: https://livedelayanalysis-backend.onrender.com
 ```
 
-Then rerun the GitHub Pages workflow or push to `main`. The workflow injects the backend URL while building the frontend. When `/api/status` reports `sourceMode: "live"`, the dashboard badge displays `Live FAA Backend Connected`.
+The GitHub Pages workflow also sets this backend URL directly while building the frontend. When `/api/status` reports `sourceMode: "live"`, the dashboard badge displays `Live FAA Backend Connected`.
