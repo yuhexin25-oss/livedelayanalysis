@@ -2,27 +2,35 @@ export default function AirportDetail({ airport }) {
   if (!airport) {
     return (
       <div>
-        <h2 className="section-title">Airport Detail</h2>
-        <p className="no-data">Click a hub on the map or in the list to inspect the airport impact panel.</p>
+        <span className="section-kicker">Inspection</span>
+        <h2>Airport Detail</h2>
+        <p className="no-data">Select an airport on the map or in a ranking to inspect its operational status.</p>
       </div>
     );
   }
 
   return (
     <div>
-      <h2 className="section-title">Airport Detail</h2>
-      <div className="detail-row"><strong>Airport</strong><span>{airport.name}</span></div>
-      <div className="detail-row"><strong>Code</strong><span>{airport.iata}</span></div>
-      <div className="detail-row"><strong>Status</strong><span>{airport.status}</span></div>
-      <div className="detail-row"><strong>Disruption</strong><span>{airport.disruptionType}</span></div>
-      <div className="detail-row"><strong>Delay</strong><span>{airport.delayMinutes} min</span></div>
-      <div className="detail-row"><strong>Connected airports</strong><span>{airport.affectedAirportsCount}</span></div>
-      <div className="detail-row"><strong>Connectivity</strong><span>{airport.hubConnectivityScore}</span></div>
-      <div className="detail-row"><strong>Impact score</strong><span>{airport.hubImpactScore}</span></div>
-      <div className="detail-row"><strong>Severity</strong><span>{airport.severity}</span></div>
-      <p style={{ marginTop: '14px', color: '#9fb4d1' }}>
-        Note: the airport detail panel reflects estimated hub impact and live FAA operational status signals.
-      </p>
+      <div className="detail-header">
+        <div>
+          <span className="section-kicker">{airport.isHub ? 'Major hub airport' : 'Monitored airport'}</span>
+          <h2>{airport.iata}</h2>
+          <p>{airport.name}</p>
+        </div>
+        <span className={`severity-pill severity-${airport.severity}`}>{airport.disruptionType}</span>
+      </div>
+      <div className="detail-grid">
+        <div><span>Reported delay</span><strong>{airport.delayMinutes || 0} min</strong></div>
+        <div><span>Impact score</span><strong>{airport.hubImpactScore ?? 'N/A'}</strong></div>
+        <div><span>Affected airports</span><strong>{airport.affectedAirportsCount ?? 'N/A'}</strong></div>
+        <div><span>Connectivity</span><strong>{airport.hubConnectivityScore ?? 'N/A'}</strong></div>
+      </div>
+      <div className="advisory-box">
+        <span>FAA airport status advisory</span>
+        <p>{airport.status}</p>
+        {airport.trend && <small>Trend: {airport.trend}</small>}
+      </div>
+      <p className="panel-footnote">This is airport-level operational status, not the status of every flight.</p>
     </div>
   );
 }

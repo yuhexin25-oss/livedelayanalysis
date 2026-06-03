@@ -1,28 +1,25 @@
 export default function TopDelays({ topDelayed, onSelect }) {
   return (
     <div>
-      <h2 className="section-title">Top Delayed Hubs</h2>
+      <div className="section-heading">
+        <div>
+          <span className="section-kicker">Current advisories</span>
+          <h2>Top Delayed Airports</h2>
+        </div>
+      </div>
       {topDelayed.length === 0 ? (
-        <p className="no-data">No delayed hubs are currently visible.</p>
+        <p className="no-data">No active delay advisories are visible for monitored airports.</p>
       ) : (
-        <ul className="simple-list">
-          {topDelayed.map(hub => (
-            <li key={hub.iata}>
-              <button className="link-button" onClick={() => onSelect(hub)}>
-                <strong>{hub.iata}</strong> — {hub.name}
-              </button>
-              <div className="detail-row">
-                <span>Delay</span><span>{hub.delayMinutes} min</span>
-              </div>
-              <div className="detail-row">
-                <span>Type</span><span>{hub.disruptionType}</span>
-              </div>
-              <div className="detail-row">
-                <span>Impact</span><span>{hub.hubImpactScore}</span>
-              </div>
-            </li>
+        <div className="delay-list">
+          {topDelayed.map((airport, index) => (
+            <button key={airport.iata} className="delay-row" onClick={() => onSelect(airport)}>
+              <span className="rank">{String(index + 1).padStart(2, '0')}</span>
+              <span className={`status-dot dot-${airport.severity}`} />
+              <span className="airport-name"><strong>{airport.iata}</strong><small>{airport.disruptionType}</small></span>
+              <span className="delay-value">{airport.delayMinutes || '—'}<small>min</small></span>
+            </button>
           ))}
-        </ul>
+        </div>
       )}
     </div>
   );

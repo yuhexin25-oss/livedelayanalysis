@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import WelcomePage from './components/WelcomePage.jsx';
 import MapView from './components/MapView.jsx';
 import TopDelays from './components/TopDelays.jsx';
@@ -6,7 +6,14 @@ import HubImpact from './components/HubImpact.jsx';
 import NetworkView from './components/NetworkView.jsx';
 import AirportDetail from './components/AirportDetail.jsx';
 
-const refreshIntervalMs = 90 * 1000;
+const refreshIntervalMs = 60 * 1000;
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || '';
+
+function formatTime(value) {
+  if (!value) return 'Not available';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+}
 
 function App() {
   const [data, setData] = useState(null);
@@ -17,12 +24,18 @@ function App() {
     let mounted = true;
     async function fetchStatus() {
       try {
-        const response = await fetch('/api/status');
+        const response = await fetch(`${apiBaseUrl}/api/status`);
         const payload = await response.json();
         if (!response.ok) throw new Error(payload.message || response.statusText);
         if (mounted) {
           setData(payload);
           setError(null);
+          setSelectedAirport(current => {
+            if (!current) return payload.hubs?.find(hub => hub.isDisrupted) || payload.hubs?.[0] || null;
+            return payload.hubs?.find(hub => hub.iata === current.iata)
+              || payload.allAirports?.find(airport => airport.iata === current.iata)
+              || current;
+          });
         }
       } catch (err) {
         if (mounted) setError(err.message || 'Unable to load airport status');
@@ -37,51 +50,83 @@ function App() {
   }, []);
 
   const topDelayed = useMemo(() => {
-    if (!data?.hubs) return [];
-    return [...data.hubs]
-      .filter(hub => hub.delayMinutes > 0 || hub.isDisrupted)
-      .sort((a, b) => b.delayMinutes - a.delayMinutes || b.hubImpactScore - a.hubImpactScore)
+    if (!data?.allAirports) return [];
+    const hubMetrics = new Map((data.hubs || []).map(hub => [hub.iata, hub]));
+    return data.allAirports
+      .filter(airport => airport.isDisrupted)
+      .map(airport => ({ ...airport, ...(hubMetrics.get(airport.iata) || {}) }))
+      .sort((a, b) => b.delayMinutes - a.delayMinutes || (b.hubImpactScore || 0) - (a.hubImpactScore || 0))
       .slice(0, 6);
   }, [data]);
 
-  const explanation = data
-    ? `Live FAA airport status source: ${data.source}. Static route network data stored locally. Estimated hub impact scores are computed from delay minutes, affected airport counts, and hub connectivity.`
-    : 'Loading live FAA airport status and static route network data...';
+  const disruptedHubs = data?.hubs?.filter(hub => hub.isDisrupted) || [];
+  const affectedAirports = new Set(disruptedHubs.flatMap(hub => hub.connectedAirports.map(airport => airport.iata))).size;
 
   return (
     <div className="app-shell">
       <header className="app-banner">
-        <div>
-          <span className="eyebrow">Hub Resilience Monitor</span>
-          <h1>U.S. Airport Delay & Hub Disruption Dashboard</h1>
-          <p>{explanation}</p>
+        <div className="banner-copy">
+          <span className="eyebrow">National Airspace Situational Awareness</span>
+          <h1>Hub Resilience Monitor</h1>
+          <p>Live U.S. airport operational status, hub disruption signals, and estimated downstream network impact.</p>
+        </div>
+        <div className="source-panel">
+          <span className={`source-badge ${data?.sourceMode === 'live' ? 'source-live' : 'source-fallback'}`}>
+            <span className="pulse-dot" />
+            {data?.sourceLabel || 'Connecting to status service'}
+          </span>
+          <span>FAA update: {formatTime(data?.faaUpdatedAt)}</span>
+          <span>Dashboard fetch: {formatTime(data?.fetchedAt)}</span>
         </div>
       </header>
+
       <main>
         <WelcomePage />
-        {error && <div className="alert">Live data error: {error}. Showing fallback sample data if available.</div>}
-        <section className="dashboard-grid">
-          <div className="card wide-card">
-            <MapView airports={data?.allAirports || []} hubs={data?.hubs || []} onSelect={setSelectedAirport} />
+
+        {error && <div className="alert">Backend connection error: {error}</div>}
+        {data?.sourceMode === 'fallback' && (
+          <div className="alert warning">
+            The FAA endpoint could not be reached. Dashboard status values are sample fallback data and are not live.
           </div>
-          <div className="card side-card">
-            <HubImpact hubs={data?.hubs || []} />
+        )}
+
+        <section className="metric-strip" aria-label="Operational overview">
+          <div className="metric-card"><span>Monitored airports</span><strong>{data?.allAirports?.length ?? '—'}</strong></div>
+          <div className="metric-card"><span>Major hubs</span><strong>{data?.hubs?.length ?? '—'}</strong></div>
+          <div className="metric-card"><span>Disrupted hubs</span><strong className={disruptedHubs.length ? 'text-alert' : ''}>{disruptedHubs.length}</strong></div>
+          <div className="metric-card"><span>Potentially connected</span><strong>{affectedAirports}</strong></div>
+        </section>
+
+        <section className="dashboard-grid primary-grid">
+          <div className="card map-card">
+            <MapView airports={data?.allAirports || []} onSelect={setSelectedAirport} />
+          </div>
+          <div className="card">
+            <HubImpact hubs={data?.hubs || []} onSelect={setSelectedAirport} />
           </div>
         </section>
-        <section className="dashboard-grid">
-          <div className="card small-card">
+
+        <section className="dashboard-grid secondary-grid">
+          <div className="card">
             <TopDelays topDelayed={topDelayed} onSelect={setSelectedAirport} />
           </div>
-          <div className="card small-card">
-            <NetworkView hubs={data?.hubs || []} routes={data?.routes || []} onSelect={setSelectedAirport} />
+          <div className="card network-card">
+            <NetworkView
+              hubs={data?.hubs || []}
+              airports={data?.allAirports || []}
+              selectedAirport={selectedAirport}
+              onSelect={setSelectedAirport}
+            />
           </div>
-          <div className="card small-card">
+          <div className="card">
             <AirportDetail airport={selectedAirport} />
           </div>
         </section>
       </main>
+
       <footer className="app-footer">
-        <p>Note: FAA data shows live airport operational status, not every individual flight. Hub impact score is an estimate and uses static route connectivity plus FAA status signals.</p>
+        <span>{data?.notice || 'FAA data shows airport-level operational status, not every individual flight.'}</span>
+        <span>Static local route network · Estimated impact score</span>
       </footer>
     </div>
   );

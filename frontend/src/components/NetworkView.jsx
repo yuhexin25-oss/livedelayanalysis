@@ -1,79 +1,63 @@
 import { useMemo } from 'react';
+import { scalePoint } from 'd3';
 
 const colors = {
-  green: '#4caf50',
-  yellow: '#f5c332',
-  orange: '#f08a24',
-  red: '#e64545',
+  green: '#45d483',
+  yellow: '#f6d365',
+  orange: '#ff9f43',
+  red: '#ff5d73',
 };
 
-export default function NetworkView({ hubs, routes, onSelect }) {
+export default function NetworkView({ hubs, airports, selectedAirport, onSelect }) {
   const graph = useMemo(() => {
-    const disruptedHubs = hubs.filter(hub => hub.isDisrupted).slice(0, 5);
-    const nodes = disruptedHubs.map((hub, index) => ({ ...hub, x: 120, y: 80 + index * 100 }));
-    const connectedNodes = [];
-    const edges = [];
-    disruptedHubs.forEach((hub, index) => {
-      const neighbors = routes
-        .filter(route => route.origin === hub.iata || route.destination === hub.iata)
-        .map(route => (route.origin === hub.iata ? route.destination : route.origin));
-      neighbors.slice(0, 3).forEach((code, idx) => {
-        const target = {
-          iata: code,
-          name: code,
-          x: 320 + idx * 120,
-          y: 60 + index * 120,
-          severity: 'green',
-          disruptionType: 'Connected airport',
-          delayMinutes: 0,
-          hubConnectivityScore: 0,
-          hubImpactScore: 0,
-          status: 'Static route network',
-        };
-        connectedNodes.push(target);
-        edges.push({ source: hub, target });
-      });
-    });
-    return { nodes: [...nodes, ...connectedNodes], edges };
-  }, [hubs, routes]);
+    const selectedHub = hubs.find(hub => hub.iata === selectedAirport?.iata && hub.isDisrupted)
+      || hubs.find(hub => hub.isDisrupted)
+      || null;
+    if (!selectedHub) return { hub: null, nodes: [] };
 
-  if (!hubs || hubs.length === 0) {
-    return <p className="no-data">Delay propagation network is unavailable.</p>;
-  }
-
-  if (graph.edges.length === 0) {
-    return <p className="no-data">No disrupted hub network paths detected right now.</p>;
-  }
+    const airportByCode = new Map(airports.map(airport => [airport.iata, airport]));
+    const neighbors = selectedHub.connectedAirports.slice(0, 10);
+    const yScale = scalePoint().domain(neighbors.map(item => item.iata)).range([42, 318]).padding(0.25);
+    const nodes = neighbors.map(neighbor => ({
+      ...(airportByCode.get(neighbor.iata) || neighbor),
+      x: 430,
+      y: yScale(neighbor.iata),
+    }));
+    return { hub: { ...selectedHub, x: 118, y: 180 }, nodes };
+  }, [hubs, airports, selectedAirport]);
 
   return (
     <div>
-      <h2 className="section-title">Delay Propagation Network</h2>
-      <svg className="network-svg" viewBox="0 0 560 360">
-        {graph.edges.map((edge, index) => (
-          <line
-            key={`edge-${index}`}
-            x1={edge.source.x}
-            y1={edge.source.y}
-            x2={edge.target.x}
-            y2={edge.target.y}
-            className="edge-line"
-          />
-        ))}
-        {graph.nodes.map((node, index) => (
-          <g key={`node-${index}`} onClick={() => onSelect(node)} style={{ cursor: 'pointer' }}>
-            <circle
-              cx={node.x}
-              cy={node.y}
-              r={node.isDisrupted ? 18 : 12}
-              fill={colors[node.severity] || '#4caf50'}
-              className="node-circle"
-            />
-            <text x={node.x + 24} y={node.y + 4} fill="#dbe7ff" fontSize="12">
-              {node.iata}
-            </text>
-          </g>
-        ))}
-      </svg>
+      <div className="section-heading">
+        <div>
+          <span className="section-kicker">Static route connections</span>
+          <h2>Delay Propagation Network</h2>
+        </div>
+        {graph.hub && <span className="count-badge">{graph.hub.iata} focus</span>}
+      </div>
+      {!graph.hub ? (
+        <p className="no-data">No disrupted hub network paths are detected right now.</p>
+      ) : (
+        <>
+          <svg className="network-svg" viewBox="0 0 560 360" role="img" aria-label={`${graph.hub.iata} connected airport network`}>
+            {graph.nodes.map(node => (
+              <line key={`edge-${node.iata}`} x1={graph.hub.x} y1={graph.hub.y} x2={node.x} y2={node.y} className="edge-line" />
+            ))}
+            <g onClick={() => onSelect(graph.hub)} className="network-node">
+              <circle cx={graph.hub.x} cy={graph.hub.y} r="34" fill={colors[graph.hub.severity]} className="hub-ring" />
+              <text x={graph.hub.x} y={graph.hub.y + 5} textAnchor="middle" className="node-code dark-code">{graph.hub.iata}</text>
+              <text x={graph.hub.x} y={graph.hub.y + 56} textAnchor="middle" className="node-caption">{graph.hub.disruptionType}</text>
+            </g>
+            {graph.nodes.map(node => (
+              <g key={node.iata} onClick={() => onSelect(node)} className="network-node">
+                <circle cx={node.x} cy={node.y} r="13" fill={colors[node.severity] || colors.green} className="node-circle" />
+                <text x={node.x + 23} y={node.y + 4} className="node-code">{node.iata}</text>
+              </g>
+            ))}
+          </svg>
+          <p className="panel-footnote">Connections show potential downstream exposure, not confirmed flight delays.</p>
+        </>
+      )}
     </div>
   );
 }

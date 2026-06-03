@@ -1,11 +1,19 @@
 export default function WelcomePage() {
   return (
-    <section className="card">
-      <h2 className="section-title">Welcome</h2>
-      <p>Hub Resilience Monitor is a live U.S. airport delay and hub disruption dashboard built for situational awareness.</p>
-      <p>It combines FAA live airport status signals with static route network data to estimate how major hub disruptions can ripple through connected airports.</p>
-      <p>Major hub airports included are ATL, ORD, DFW, DEN, LAX, JFK, EWR, SFO, SEA, CLT, PHX, IAH, LAS, and MIA.</p>
-      <p>This dashboard is designed as an operational support tool, showing airport-level status and estimated impact, not flight-level tracking.</p>
+    <section className="welcome-card">
+      <div>
+        <span className="section-kicker">Welcome</span>
+        <h2>See where a hub disruption could travel next.</h2>
+      </div>
+      <p>
+        Hub Resilience Monitor combines live FAA airport advisories with a static local route network to estimate
+        operational ripple effects across major U.S. hubs. It is an airport-level awareness tool, not a flight tracker.
+      </p>
+      <div className="provenance-row">
+        <span><i className="provenance-dot live-dot" />Live FAA status</span>
+        <span><i className="provenance-dot static-dot" />Static route network</span>
+        <span><i className="provenance-dot estimate-dot" />Estimated impact score</span>
+      </div>
     </section>
   );
 }

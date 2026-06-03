@@ -1,27 +1,29 @@
-export default function HubImpact({ hubs }) {
-  if (!hubs || hubs.length === 0) {
-    return <div className="no-data">Hub impact data is not available yet.</div>;
-  }
-
-  const disrupted = hubs.filter(hub => hub.isDisrupted);
-  const highest = [...hubs].sort((a, b) => b.hubImpactScore - a.hubImpactScore)[0];
-  const averageImpact = Math.round(hubs.reduce((sum, hub) => sum + hub.hubImpactScore, 0) / hubs.length);
+export default function HubImpact({ hubs, onSelect }) {
+  const ranked = [...hubs].sort((a, b) => b.hubImpactScore - a.hubImpactScore);
+  const disrupted = ranked.filter(hub => hub.isDisrupted);
+  const maxScore = Math.max(...ranked.map(hub => hub.hubImpactScore), 1);
 
   return (
     <div>
-      <h2 className="section-title">Hub Impact Score</h2>
-      <div className="detail-row">
-        <strong>Disrupted hubs</strong><span>{disrupted.length} / {hubs.length}</span>
+      <div className="section-heading">
+        <div>
+          <span className="section-kicker">Estimated network effect</span>
+          <h2>Hub Impact Score</h2>
+        </div>
+        <span className="count-badge">{disrupted.length} disrupted</span>
       </div>
-      <div className="detail-row">
-        <strong>Highest impact</strong><span>{highest.iata} ({highest.hubImpactScore})</span>
+      <p className="section-note">Delay minutes × 0.5 + affected airports × 2 + connectivity × 0.3</p>
+      <div className="impact-list">
+        {ranked.slice(0, 8).map(hub => (
+          <button className="impact-row" key={hub.iata} onClick={() => onSelect(hub)}>
+            <span className={`status-dot dot-${hub.severity}`} />
+            <strong>{hub.iata}</strong>
+            <span className="impact-track"><i style={{ width: `${(hub.hubImpactScore / maxScore) * 100}%` }} /></span>
+            <span>{hub.hubImpactScore.toFixed(1)}</span>
+          </button>
+        ))}
       </div>
-      <div className="detail-row">
-        <strong>Average score</strong><span>{averageImpact}</span>
-      </div>
-      <p style={{ marginTop: '18px', color: '#9fb4d1' }}>
-        The estimated score uses delay minutes, the number of downstream affected airports, and hub connectivity.
-      </p>
+      <p className="panel-footnote">Scores are estimates based on live FAA signals and static local route connectivity.</p>
     </div>
   );
 }

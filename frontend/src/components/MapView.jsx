@@ -1,51 +1,49 @@
-import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet';
+import { CircleMarker, MapContainer, Popup, TileLayer, Tooltip } from 'react-leaflet';
 
 const severityStyles = {
-  green: { color: '#4caf50', fillColor: '#4caf50' },
-  yellow: { color: '#f5c332', fillColor: '#f5c332' },
-  orange: { color: '#f08a24', fillColor: '#f08a24' },
-  red: { color: '#e64545', fillColor: '#e64545' },
+  green: { color: '#45d483', fillColor: '#45d483' },
+  yellow: { color: '#f6d365', fillColor: '#f6d365' },
+  orange: { color: '#ff9f43', fillColor: '#ff9f43' },
+  red: { color: '#ff5d73', fillColor: '#ff5d73' },
 };
 
-export default function MapView({ airports, hubs, onSelect }) {
-  const markers = hubs.map(hub => {
-    const airport = airports.find(a => a.iata === hub.iata);
-    return {
-      ...hub,
-      lat: airport?.lat ?? 37.0902,
-      lon: airport?.lon ?? -95.7129,
-    };
-  });
-
+export default function MapView({ airports, onSelect }) {
   return (
     <div className="map-wrapper">
       <div className="map-overlay">
-        <strong>Live Delay Map</strong>
+        <div>
+          <span className="section-kicker">Operational map</span>
+          <strong>Live Airport Delay Status</strong>
+        </div>
         <div className="legend">
-          <span className="legend-chip"><span className="legend-swatch swatch-green" />Normal</span>
-          <span className="legend-chip"><span className="legend-swatch swatch-yellow" />Minor</span>
-          <span className="legend-chip"><span className="legend-swatch swatch-orange" />Moderate</span>
-          <span className="legend-chip"><span className="legend-swatch swatch-red" />Severe</span>
+          <span><i className="legend-swatch swatch-green" />Normal</span>
+          <span><i className="legend-swatch swatch-yellow" />Minor</span>
+          <span><i className="legend-swatch swatch-orange" />Moderate</span>
+          <span><i className="legend-swatch swatch-red" />Severe</span>
         </div>
       </div>
-      <MapContainer center={[39.8283, -98.5795]} zoom={4} scrollWheelZoom={false} style={{ height: '100%', width: '100%' }}>
+      <MapContainer center={[38.6, -97.5]} zoom={4} minZoom={3} scrollWheelZoom style={{ height: '100%', width: '100%' }}>
         <TileLayer
-          attribution='&copy; OpenStreetMap contributors'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          attribution='&copy; OpenStreetMap &copy; CARTO'
+          url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
         />
-        {markers.map(marker => (
+        {airports.map(airport => (
           <CircleMarker
-            key={marker.iata}
-            center={[marker.lat, marker.lon]}
-            radius={10}
-            pathOptions={severityStyles[marker.severity] || severityStyles.green}
-            eventHandlers={{ click: () => onSelect(marker) }}
+            key={airport.iata}
+            center={[airport.lat, airport.lon]}
+            radius={airport.isHub ? 9 : 5}
+            pathOptions={{
+              ...(severityStyles[airport.severity] || severityStyles.green),
+              fillOpacity: airport.isHub ? 0.9 : 0.55,
+              weight: airport.isHub ? 2 : 1,
+            }}
+            eventHandlers={{ click: () => onSelect(airport) }}
           >
+            {airport.isHub && <Tooltip direction="top" offset={[0, -8]} opacity={0.9}>{airport.iata}</Tooltip>}
             <Popup>
-              <strong>{marker.iata}</strong><br />
-              {marker.name}<br />
-              {marker.disruptionType} · {marker.delayMinutes} min<br />
-              Impact {marker.hubImpactScore}
+              <strong>{airport.iata} · {airport.name}</strong><br />
+              {airport.disruptionType}<br />
+              {airport.delayMinutes ? `${airport.delayMinutes} min reported delay` : 'No reported delay minutes'}
             </Popup>
           </CircleMarker>
         ))}

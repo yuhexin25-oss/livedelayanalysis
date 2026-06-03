@@ -1,28 +1,38 @@
 # Hub Resilience Monitor
 
-A real-time U.S. airport delay and hub disruption dashboard that combines FAA live airport status data with static route network data.
+Hub Resilience Monitor is a real-time U.S. airport delay and hub disruption dashboard. It combines FAA airport-level operational advisories with a static local route network to estimate how disruptions at major hubs may affect connected airports.
 
-## Project structure
+The dashboard is explicit about provenance:
 
-- `backend/` - Node.js + Express backend fetching FAA airport status and converting XML to JSON.
-- `frontend/` - React + Vite dashboard with Leaflet map and delay propagation visualization.
-- `data/` - Static airport network data and fallback sample FAA status data.
+- **Live FAA airport status** is fetched from the FAA every five minutes.
+- **Static route network data** is stored locally in `data/`.
+- **Hub Impact Score** is an estimate, not an FAA metric or a confirmed flight-delay forecast.
+- **Fallback status data** is clearly labeled as sample data and is never presented as live.
 
 ## Features
 
-- Live FAA airport status poll every 5 minutes
-- Converts FAA XML into clean JSON payloads for the frontend
-- Dark aviation dashboard user interface
-- U.S. airport delay map with hub severity colors
-- Top delayed airports panel
-- Hub Impact Score and disruption metrics
-- Delay propagation network visualization for hub connections
-- Airport detail panel when selecting an airport
-- Sample fallback data when FAA API is unavailable
+- Welcome and methodology overview
+- Live U.S. airport delay map using Leaflet
+- Top delayed airports ranking
+- Major hub disruption monitoring
+- Estimated Hub Impact Score
+- D3-based delay propagation network for connected airports
+- Airport detail panel
+- Five-minute backend cache and sample fallback data
+
+Major hubs monitored: ATL, ORD, DFW, DEN, LAX, JFK, EWR, SFO, SEA, CLT, PHX, IAH, LAS, and MIA.
+
+## Project Structure
+
+```text
+backend/   Node.js and Express API
+frontend/  React and Vite dashboard
+data/      Local airport, route, and fallback status JSON
+```
 
 ## Install
 
-From the repository root, install both backend and frontend dependencies separately:
+Node.js 18 or newer is required.
 
 ```bash
 cd backend
@@ -32,33 +42,90 @@ cd ../frontend
 npm install
 ```
 
-## Run backend
+## Run the Backend
 
 ```bash
 cd backend
 npm start
 ```
 
-The backend listens on port `3000` and exposes `/api/status`.
+The backend listens on `http://localhost:3000` and exposes:
 
-## Run frontend
+- `GET /` health message
+- `GET /api/status` normalized dashboard JSON
+
+For development with automatic restarts:
+
+```bash
+npm run dev
+```
+
+## Run the Frontend
 
 ```bash
 cd frontend
 npm run dev
 ```
 
-The frontend runs on port `5173` and proxies `/api` to the backend.
+Vite runs at `http://localhost:5173` and proxies `/api` requests to the local backend.
 
-## Data sources
+Build the static frontend with:
 
-- Live FAA airport status: `https://nasstatus.faa.gov/api/airport-status-information`
-- Static local airport data: `data/airports.json`
-- Static local route network data: `data/routes.json`
-- Sample fallback FAA status data: `data/fallback_status.json`
+```bash
+npm run build
+```
 
-## Notes
+## Tests
 
-- The dashboard clearly distinguishes live FAA airport status from local static route network data and estimated impact scores.
-- Sample fallback data is used when the FAA API cannot be reached.
-- This project is structured to support deployment with a static frontend build and a server backend.
+```bash
+cd backend
+npm test
+```
+
+The backend tests cover the FAA category-based XML parser and hub impact behavior.
+
+## Data Sources
+
+- FAA live airport status API: <https://nasstatus.faa.gov/api/airport-status-information>
+- Local airport metadata: `data/airports.json`
+- Local static route network: `data/routes.json`
+- Sample fallback operational status: `data/fallback_status.json`
+
+FAA data describes current airport operational advisories, not every individual flight. Route connections model potential downstream exposure and do not prove that a connected airport or flight is delayed.
+
+## Hub Impact Score
+
+The estimated score is calculated only for disrupted hubs:
+
+```text
+hub_impact_score =
+  delay_minutes * 0.5 +
+  affected_airports_count * 2 +
+  hub_connectivity_score * 0.3
+```
+
+`affected_airports_count` is the number of locally modeled airports connected to a disrupted hub. `hub_connectivity_score` is the hub's degree in the static route network.
+
+## Deployment
+
+### Render Backend
+
+Create a Render Web Service rooted at `backend/`:
+
+- Build command: `npm install`
+- Start command: `npm start`
+- Health check path: `/`
+
+Render supplies the `PORT` environment variable automatically.
+
+### GitHub Pages Frontend
+
+Set frontend environment variables before building:
+
+```bash
+VITE_API_BASE_URL=https://your-render-service.onrender.com
+VITE_BASE_PATH=/your-repository-name/
+npm run build
+```
+
+Publish `frontend/dist/` to GitHub Pages. The backend enables CORS so the Pages frontend can call the Render API.
