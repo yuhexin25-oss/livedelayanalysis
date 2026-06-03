@@ -140,6 +140,13 @@ The repository also includes `render.yaml` for a Render Blueprint named `livedel
 https://yuhexin25-oss.github.io
 ```
 
+To create the service from the Blueprint:
+
+1. Open the Render Dashboard.
+2. Select `New → Blueprint`.
+3. Connect the `yuhexin25-oss/livedelayanalysis` repository.
+4. Keep the Blueprint path as `render.yaml` and deploy the Blueprint.
+
 After Render deploys the service, verify that these URLs return JSON:
 
 ```text
