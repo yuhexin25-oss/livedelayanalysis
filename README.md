@@ -2,6 +2,8 @@
 
 Hub Resilience Monitor is a real-time U.S. airport delay and hub disruption dashboard. It combines FAA airport-level operational advisories with a static local route network to estimate how disruptions at major hubs may affect connected airports.
 
+**Live dashboard:** <https://yuhexin25-oss.github.io/livedelayanalysis/>
+
 The dashboard is explicit about provenance:
 
 - **Live FAA airport status** is fetched from the FAA every five minutes.
@@ -120,12 +122,20 @@ Render supplies the `PORT` environment variable automatically.
 
 ### GitHub Pages Frontend
 
-Set frontend environment variables before building:
+The repository includes `.github/workflows/deploy.yml`, which builds the app inside `frontend/` and deploys only `frontend/dist/` to GitHub Pages. The Vite base path is fixed to `/livedelayanalysis/` so JavaScript, CSS, and other generated asset URLs work at the project Pages URL.
 
-```bash
-VITE_API_BASE_URL=https://your-render-service.onrender.com
-VITE_BASE_PATH=/your-repository-name/
-npm run build
+In the GitHub repository, change:
+
+```text
+Settings → Pages → Build and deployment → Source → GitHub Actions
 ```
 
-Publish `frontend/dist/` to GitHub Pages. The backend enables CORS so the Pages frontend can call the Render API.
+To connect the deployed frontend to the Render backend, add a repository Actions variable:
+
+```text
+Settings → Secrets and variables → Actions → Variables → New repository variable
+Name: VITE_API_BASE_URL
+Value: https://your-render-service.onrender.com
+```
+
+Push to `main` to trigger the deployment. The workflow uploads the built React app rather than the root repository README.
