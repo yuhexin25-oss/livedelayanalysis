@@ -30,6 +30,7 @@ Major hubs monitored: ATL, ORD, DFW, DEN, LAX, JFK, EWR, SFO, SEA, CLT, PHX, IAH
 
 ```text
 backend/   Node.js and Express API
+backend/data/  Static data bundled with the Render backend
 frontend/  React and Vite dashboard
 data/      Local airport, route, and fallback status JSON
 ```
@@ -56,7 +57,10 @@ npm start
 The backend listens on `http://localhost:3000` and exposes:
 
 - `GET /` health message
+- `GET /api/health` JSON health and latest FAA source metadata
 - `GET /api/status` normalized dashboard JSON
+
+All backend routes, including errors and unknown routes, return JSON rather than HTML.
 
 For development with automatic restarts:
 
@@ -123,11 +127,25 @@ hub_impact_score =
 
 GitHub Pages cannot run the backend. Deploy `backend/` separately on Render, Railway, or another Node.js hosting service. For Render, create a Web Service rooted at `backend/`:
 
-- Build command: `npm install`
-- Start command: `npm start`
-- Health check path: `/`
+- Root Directory: `backend`
+- Build Command: `npm install`
+- Start Command: `npm start`
+- Health Check Path: `/api/health`
 
 Render supplies the `PORT` environment variable automatically.
+
+The repository also includes `render.yaml` for a Render Blueprint named `livedelayanalysis-backend`. The backend allows browser requests from:
+
+```text
+https://yuhexin25-oss.github.io
+```
+
+After Render deploys the service, verify that these URLs return JSON:
+
+```text
+https://YOUR-RENDER-BACKEND-URL/api/health
+https://YOUR-RENDER-BACKEND-URL/api/status
+```
 
 ### GitHub Pages Frontend
 
@@ -154,7 +172,7 @@ To connect the deployed frontend to the Render backend, add a repository Actions
 ```text
 Settings → Secrets and variables → Actions → Variables → New repository variable
 Name: VITE_API_BASE_URL
-Value: https://your-render-service.onrender.com
+Value: https://YOUR-RENDER-BACKEND-URL
 ```
 
-Push to `main` to trigger the deployment. The workflow uploads the built React app rather than the root repository README.
+Then rerun the GitHub Pages workflow or push to `main`. The workflow injects the backend URL while building the frontend. When `/api/status` reports `sourceMode: "live"`, the dashboard badge displays `Live FAA Backend Connected`.

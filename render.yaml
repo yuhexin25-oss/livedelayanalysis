@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: livedelayanalysis-backend
+    runtime: node
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeployTrigger: commit

@@ -1,17 +1,58 @@
 import express from 'express';
 import cors from 'cors';
 import statusRouter from './routes/status.js';
-import { startStatusRefresh } from './services/statusService.js';
+import { getLatestStatus, startStatusRefresh } from './services/statusService.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const ALLOWED_ORIGINS = new Set([
+  'https://yuhexin25-oss.github.io',
+  'http://localhost:5173',
+]);
 
-app.use(cors());
+app.disable('x-powered-by');
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin || ALLOWED_ORIGINS.has(origin)) return callback(null, true);
+    return callback(new Error('Origin is not allowed by CORS'));
+  },
+}));
 app.use(express.json());
 app.use('/api/status', statusRouter);
 
+app.get('/api/health', (req, res) => {
+  const status = getLatestStatus();
+  res.json({
+    ok: true,
+    service: 'hub-resilience-monitor-backend',
+    sourceMode: status.sourceMode,
+    sourceLabel: status.sourceLabel,
+    faaUpdatedAt: status.faaUpdatedAt,
+    fetchedAt: status.fetchedAt,
+  });
+});
+
 app.get('/', (req, res) => {
-  res.json({ message: 'Hub Resilience Monitor backend is running.', statusEndpoint: '/api/status' });
+  res.json({
+    message: 'Hub Resilience Monitor backend is running.',
+    healthEndpoint: '/api/health',
+    statusEndpoint: '/api/status',
+  });
+});
+
+app.use((req, res) => {
+  res.status(404).json({
+    error: 'Not Found',
+    message: `No API route exists for ${req.method} ${req.originalUrl}`,
+  });
+});
+
+app.use((error, req, res, next) => {
+  console.error('[server]', error.message);
+  res.status(error.message === 'Origin is not allowed by CORS' ? 403 : 500).json({
+    error: error.message === 'Origin is not allowed by CORS' ? 'CORS Forbidden' : 'Internal Server Error',
+    message: error.message,
+  });
 });
 
 await startStatusRefresh();

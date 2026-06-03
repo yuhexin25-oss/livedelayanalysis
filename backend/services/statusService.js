@@ -26,7 +26,7 @@ let latestStatus = {
 };
 
 async function readJson(relativePath) {
-  const filePath = path.resolve(__dirname, '../../data', relativePath);
+  const filePath = path.resolve(__dirname, '../data', relativePath);
   const content = await fs.readFile(filePath, 'utf-8');
   return JSON.parse(content);
 }
