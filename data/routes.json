@@ -1,0 +1,18 @@
+[
+  {"origin":"ATL","destination":"BOS"},
+  {"origin":"ATL","destination":"ORD"},
+  {"origin":"ATL","destination":"DFW"},
+  {"origin":"ORD","destination":"DEN"},
+  {"origin":"ORD","destination":"PHL"},
+  {"origin":"DFW","destination":"LAX"},
+  {"origin":"LAX","destination":"SFO"},
+  {"origin":"LAX","destination":"SEA"},
+  {"origin":"DEN","destination":"PHX"},
+  {"origin":"JFK","destination":"MIA"},
+  {"origin":"EWR","destination":"IAD"},
+  {"origin":"SFO","destination":"LAS"},
+  {"origin":"SEA","destination":"IAH"},
+  {"origin":"CLT","destination":"MSP"},
+  {"origin":"PHX","destination":"LAS"},
+  {"origin":"IAH","destination":"MIA"}
+]
