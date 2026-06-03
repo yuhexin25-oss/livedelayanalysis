@@ -1,0 +1,20 @@
+[
+  {"iata":"ATL","name":"Hartsfield-Jackson Atlanta International Airport","lat":33.6407,"lon":-84.4277},
+  {"iata":"ORD","name":"Chicago O'Hare International Airport","lat":41.9742,"lon":-87.9073},
+  {"iata":"DFW","name":"Dallas/Fort Worth International Airport","lat":32.8998,"lon":-97.0403},
+  {"iata":"DEN","name":"Denver International Airport","lat":39.8561,"lon":-104.6737},
+  {"iata":"LAX","name":"Los Angeles International Airport","lat":33.9416,"lon":-118.4085},
+  {"iata":"JFK","name":"John F. Kennedy International Airport","lat":40.6413,"lon":-73.7781},
+  {"iata":"EWR","name":"Newark Liberty International Airport","lat":40.6895,"lon":-74.1745},
+  {"iata":"SFO","name":"San Francisco International Airport","lat":37.6213,"lon":-122.3790},
+  {"iata":"SEA","name":"Seattle-Tacoma International Airport","lat":47.4502,"lon":-122.3088},
+  {"iata":"CLT","name":"Charlotte Douglas International Airport","lat":35.2140,"lon":-80.9431},
+  {"iata":"PHX","name":"Phoenix Sky Harbor International Airport","lat":33.4342,"lon":-112.0116},
+  {"iata":"IAH","name":"George Bush Intercontinental Airport","lat":29.9902,"lon":-95.3368},
+  {"iata":"LAS","name":"Harry Reid International Airport","lat":36.0840,"lon":-115.1537},
+  {"iata":"MIA","name":"Miami International Airport","lat":25.7959,"lon":-80.2871},
+  {"iata":"BOS","name":"Logan International Airport","lat":42.3656,"lon":-71.0096},
+  {"iata":"MSP","name":"Minneapolis-Saint Paul International Airport","lat":44.8848,"lon":-93.2223},
+  {"iata":"PHL","name":"Philadelphia International Airport","lat":39.8729,"lon":-75.2437},
+  {"iata":"IAD","name":"Washington Dulles International Airport","lat":38.9531,"lon":-77.4565}
+]

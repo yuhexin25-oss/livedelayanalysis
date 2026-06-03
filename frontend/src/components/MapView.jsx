@@ -7,13 +7,13 @@ const severityStyles = {
   red: { color: '#ff5d73', fillColor: '#ff5d73' },
 };
 
-export default function MapView({ airports, onSelect }) {
+export default function MapView({ airports, sourceMode, onSelect }) {
   return (
     <div className="map-wrapper">
       <div className="map-overlay">
         <div>
           <span className="section-kicker">Operational map</span>
-          <strong>Live Airport Delay Status</strong>
+          <strong>{sourceMode === 'live' ? 'Live Airport Delay Status' : 'Sample Airport Delay Status'}</strong>
         </div>
         <div className="legend">
           <span><i className="legend-swatch swatch-green" />Normal</span>

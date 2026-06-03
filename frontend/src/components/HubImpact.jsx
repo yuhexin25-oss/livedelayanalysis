@@ -1,4 +1,4 @@
-export default function HubImpact({ hubs, onSelect }) {
+export default function HubImpact({ hubs, sourceMode, onSelect }) {
   const ranked = [...hubs].sort((a, b) => b.hubImpactScore - a.hubImpactScore);
   const disrupted = ranked.filter(hub => hub.isDisrupted);
   const maxScore = Math.max(...ranked.map(hub => hub.hubImpactScore), 1);
@@ -23,7 +23,9 @@ export default function HubImpact({ hubs, onSelect }) {
           </button>
         ))}
       </div>
-      <p className="panel-footnote">Scores are estimates based on live FAA signals and static local route connectivity.</p>
+      <p className="panel-footnote">
+        Scores are estimates based on {sourceMode === 'live' ? 'live FAA signals' : 'sample status data'} and static local route connectivity.
+      </p>
     </div>
   );
 }

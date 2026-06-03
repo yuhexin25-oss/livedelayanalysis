@@ -5,9 +5,39 @@ import TopDelays from './components/TopDelays.jsx';
 import HubImpact from './components/HubImpact.jsx';
 import NetworkView from './components/NetworkView.jsx';
 import AirportDetail from './components/AirportDetail.jsx';
+import { buildFallbackDashboardData } from './utils/dashboardData.js';
 
 const refreshIntervalMs = 60 * 1000;
-const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || '';
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/+$/, '');
+const FALLBACK_DATA_BASE_URL = `${import.meta.env.BASE_URL}data`;
+
+function hasValidApiBaseUrl() {
+  try {
+    const url = new URL(API_BASE_URL);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+async function fetchJson(url) {
+  const response = await fetch(url, { headers: { Accept: 'application/json' } });
+  const contentType = response.headers.get('content-type') || '';
+  if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+  if (!contentType.includes('application/json')) {
+    throw new Error(`Expected JSON but received ${contentType || 'an unknown content type'}`);
+  }
+  return response.json();
+}
+
+async function loadFallbackData() {
+  const [statuses, airports, routes] = await Promise.all([
+    fetchJson(`${FALLBACK_DATA_BASE_URL}/fallback-status.json`),
+    fetchJson(`${FALLBACK_DATA_BASE_URL}/airports.json`),
+    fetchJson(`${FALLBACK_DATA_BASE_URL}/routes.json`),
+  ]);
+  return buildFallbackDashboardData({ statuses, airports, routes });
+}
 
 function formatTime(value) {
   if (!value) return 'Not available';
@@ -18,27 +48,45 @@ function formatTime(value) {
 function App() {
   const [data, setData] = useState(null);
   const [selectedAirport, setSelectedAirport] = useState(null);
-  const [error, setError] = useState(null);
+  const [backendMessage, setBackendMessage] = useState(null);
 
   useEffect(() => {
     let mounted = true;
     async function fetchStatus() {
+      let payload;
       try {
-        const response = await fetch(`${apiBaseUrl}/api/status`);
-        const payload = await response.json();
-        if (!response.ok) throw new Error(payload.message || response.statusText);
+        if (!hasValidApiBaseUrl()) {
+          throw new Error('VITE_API_BASE_URL is not configured with an absolute URL');
+        }
+        payload = await fetchJson(`${API_BASE_URL}/api/status`);
+        if (!payload?.allAirports || !payload?.hubs || !payload?.routes) {
+          throw new Error('Backend response is missing dashboard data');
+        }
         if (mounted) {
-          setData(payload);
-          setError(null);
-          setSelectedAirport(current => {
-            if (!current) return payload.hubs?.find(hub => hub.isDisrupted) || payload.hubs?.[0] || null;
-            return payload.hubs?.find(hub => hub.iata === current.iata)
-              || payload.allAirports?.find(airport => airport.iata === current.iata)
-              || current;
-          });
+          setBackendMessage(payload.sourceMode === 'live'
+            ? null
+            : 'Backend connected, but it is serving sample fallback data. These values are not live.');
         }
       } catch (err) {
-        if (mounted) setError(err.message || 'Unable to load airport status');
+        try {
+          payload = await loadFallbackData();
+          if (mounted) setBackendMessage('Using sample fallback data — backend not connected');
+        } catch (fallbackError) {
+          if (mounted) {
+            setBackendMessage(`Unable to load backend or fallback data: ${fallbackError.message}`);
+          }
+          return;
+        }
+      }
+
+      if (mounted) {
+        setData(payload);
+        setSelectedAirport(current => {
+          if (!current) return payload.hubs?.find(hub => hub.isDisrupted) || payload.hubs?.[0] || null;
+          return payload.hubs?.find(hub => hub.iata === current.iata)
+            || payload.allAirports?.find(airport => airport.iata === current.iata)
+            || current;
+        });
       }
     }
     fetchStatus();
@@ -68,12 +116,16 @@ function App() {
         <div className="banner-copy">
           <span className="eyebrow">National Airspace Situational Awareness</span>
           <h1>Hub Resilience Monitor</h1>
-          <p>Live U.S. airport operational status, hub disruption signals, and estimated downstream network impact.</p>
+          <p>
+            {data?.sourceMode === 'live'
+              ? 'Live U.S. airport operational status, hub disruption signals, and estimated downstream network impact.'
+              : 'U.S. airport hub disruption scenarios and estimated downstream network impact.'}
+          </p>
         </div>
         <div className="source-panel">
           <span className={`source-badge ${data?.sourceMode === 'live' ? 'source-live' : 'source-fallback'}`}>
             <span className="pulse-dot" />
-            {data?.sourceLabel || 'Connecting to status service'}
+            {data ? (data.sourceMode === 'live' ? 'Live FAA Backend Connected' : 'Sample Data Mode') : 'Loading dashboard data'}
           </span>
           <span>FAA update: {formatTime(data?.faaUpdatedAt)}</span>
           <span>Dashboard fetch: {formatTime(data?.fetchedAt)}</span>
@@ -81,14 +133,9 @@ function App() {
       </header>
 
       <main>
-        <WelcomePage />
+        <WelcomePage sourceMode={data?.sourceMode} />
 
-        {error && <div className="alert">Backend connection error: {error}</div>}
-        {data?.sourceMode === 'fallback' && (
-          <div className="alert warning">
-            The FAA endpoint could not be reached. Dashboard status values are sample fallback data and are not live.
-          </div>
-        )}
+        {backendMessage && <div className="alert warning">{backendMessage}</div>}
 
         <section className="metric-strip" aria-label="Operational overview">
           <div className="metric-card"><span>Monitored airports</span><strong>{data?.allAirports?.length ?? '—'}</strong></div>
@@ -99,10 +146,10 @@ function App() {
 
         <section className="dashboard-grid primary-grid">
           <div className="card map-card">
-            <MapView airports={data?.allAirports || []} onSelect={setSelectedAirport} />
+            <MapView airports={data?.allAirports || []} sourceMode={data?.sourceMode} onSelect={setSelectedAirport} />
           </div>
           <div className="card">
-            <HubImpact hubs={data?.hubs || []} onSelect={setSelectedAirport} />
+            <HubImpact hubs={data?.hubs || []} sourceMode={data?.sourceMode} onSelect={setSelectedAirport} />
           </div>
         </section>
 
@@ -119,7 +166,7 @@ function App() {
             />
           </div>
           <div className="card">
-            <AirportDetail airport={selectedAirport} />
+            <AirportDetail airport={selectedAirport} sourceMode={data?.sourceMode} />
           </div>
         </section>
       </main>

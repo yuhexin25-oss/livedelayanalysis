@@ -11,6 +11,8 @@ The dashboard is explicit about provenance:
 - **Hub Impact Score** is an estimate, not an FAA metric or a confirmed flight-delay forecast.
 - **Fallback status data** is clearly labeled as sample data and is never presented as live.
 
+GitHub Pages hosts only the static React frontend. It does not run the Node.js/Express backend. Without a separately deployed backend URL, the dashboard automatically operates in clearly labeled sample data mode.
+
 ## Features
 
 - Welcome and methodology overview
@@ -69,7 +71,13 @@ cd frontend
 npm run dev
 ```
 
-Vite runs at `http://localhost:5173` and proxies `/api` requests to the local backend.
+Vite runs at `http://localhost:5173`. To connect it to a local or deployed backend, create `frontend/.env.local`:
+
+```text
+VITE_API_BASE_URL=http://localhost:3000
+```
+
+If `VITE_API_BASE_URL` is empty, invalid, unavailable, or returns non-JSON content, the frontend loads its local sample data instead of making a relative backend request.
 
 Build the static frontend with:
 
@@ -92,6 +100,7 @@ The backend tests cover the FAA category-based XML parser and hub impact behavio
 - Local airport metadata: `data/airports.json`
 - Local static route network: `data/routes.json`
 - Sample fallback operational status: `data/fallback_status.json`
+- GitHub Pages frontend fallback assets: `frontend/public/data/`
 
 FAA data describes current airport operational advisories, not every individual flight. Route connections model potential downstream exposure and do not prove that a connected airport or flight is delayed.
 
@@ -112,7 +121,7 @@ hub_impact_score =
 
 ### Render Backend
 
-Create a Render Web Service rooted at `backend/`:
+GitHub Pages cannot run the backend. Deploy `backend/` separately on Render, Railway, or another Node.js hosting service. For Render, create a Web Service rooted at `backend/`:
 
 - Build command: `npm install`
 - Start command: `npm start`
@@ -123,6 +132,16 @@ Render supplies the `PORT` environment variable automatically.
 ### GitHub Pages Frontend
 
 The repository includes `.github/workflows/deploy.yml`, which builds the app inside `frontend/` and deploys only `frontend/dist/` to GitHub Pages. The Vite base path is fixed to `/livedelayanalysis/` so JavaScript, CSS, and other generated asset URLs work at the project Pages URL.
+
+The deployed frontend remains usable without a backend. In that case it loads:
+
+```text
+/livedelayanalysis/data/fallback-status.json
+/livedelayanalysis/data/airports.json
+/livedelayanalysis/data/routes.json
+```
+
+and displays `Sample Data Mode` plus `Using sample fallback data — backend not connected`.
 
 In the GitHub repository, change:
 

@@ -1,4 +1,4 @@
-export default function AirportDetail({ airport }) {
+export default function AirportDetail({ airport, sourceMode }) {
   if (!airport) {
     return (
       <div>
@@ -26,7 +26,7 @@ export default function AirportDetail({ airport }) {
         <div><span>Connectivity</span><strong>{airport.hubConnectivityScore ?? 'N/A'}</strong></div>
       </div>
       <div className="advisory-box">
-        <span>FAA airport status advisory</span>
+        <span>{sourceMode === 'live' ? 'FAA airport status advisory' : 'Sample airport status advisory'}</span>
         <p>{airport.status}</p>
         {airport.trend && <small>Trend: {airport.trend}</small>}
       </div>

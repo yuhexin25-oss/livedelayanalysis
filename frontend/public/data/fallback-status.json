@@ -1,0 +1,7 @@
+[
+  {"airportCode":"ATL","airportName":"Hartsfield-Jackson Atlanta International Airport","status":"Sample delay program active","delayMinutes":45,"groundStop":false,"groundDelayProgram":true,"closure":false,"weatherDelay":false},
+  {"airportCode":"ORD","airportName":"Chicago O'Hare International Airport","status":"Sample weather delay","delayMinutes":70,"groundStop":false,"groundDelayProgram":false,"closure":false,"weatherDelay":true},
+  {"airportCode":"LAX","airportName":"Los Angeles International Airport","status":"Sample ground stop","delayMinutes":120,"groundStop":true,"groundDelayProgram":false,"closure":false,"weatherDelay":false},
+  {"airportCode":"JFK","airportName":"John F. Kennedy International Airport","status":"Sample minor delay","delayMinutes":20,"groundStop":false,"groundDelayProgram":false,"closure":false,"weatherDelay":false},
+  {"airportCode":"DEN","airportName":"Denver International Airport","status":"Sample normal operations","delayMinutes":0,"groundStop":false,"groundDelayProgram":false,"closure":false,"weatherDelay":false}
+]
