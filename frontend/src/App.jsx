@@ -8,6 +8,7 @@ import AirportDetail from './components/AirportDetail.jsx';
 import AirportSearch from './components/AirportSearch.jsx';
 import MethodologyModal from './components/MethodologyModal.jsx';
 import TrendPanel from './components/TrendPanel.jsx';
+import FlightRiskAnalyzer from './components/FlightRiskAnalyzer.jsx';
 import { buildFallbackDashboardData } from './utils/dashboardData.js';
 
 const refreshIntervalMs = 60 * 1000;
@@ -19,6 +20,7 @@ const navigationItems = [
   { id: 'dashboard', label: 'Live Dashboard' },
   { id: 'detail', label: 'Airport Detail' },
   { id: 'network', label: 'Propagation Network' },
+  { id: 'flight-risk', label: 'Flight Risk Analyzer' },
   { id: 'methodology', label: 'Methodology' },
   { id: 'about', label: 'About Project' },
 ];
@@ -338,6 +340,15 @@ function App() {
               <TrendPanel airport={activeHub || selectedAirportView} sourceMode={data?.sourceMode} />
             </div>
           </section>
+        );
+      case 'flight-risk':
+        return (
+          <FlightRiskAnalyzer
+            airports={enrichedAirports}
+            routes={data?.routes || []}
+            sourceMode={data?.sourceMode}
+            faaUpdatedAt={data?.faaUpdatedAt}
+          />
         );
       case 'methodology':
         return (
