@@ -5,6 +5,9 @@ import TopDelays from './components/TopDelays.jsx';
 import HubImpact from './components/HubImpact.jsx';
 import NetworkView from './components/NetworkView.jsx';
 import AirportDetail from './components/AirportDetail.jsx';
+import AirportSearch from './components/AirportSearch.jsx';
+import MethodologyModal from './components/MethodologyModal.jsx';
+import TrendPanel from './components/TrendPanel.jsx';
 import { buildFallbackDashboardData } from './utils/dashboardData.js';
 
 const refreshIntervalMs = 60 * 1000;
@@ -49,6 +52,7 @@ function App() {
   const [data, setData] = useState(null);
   const [selectedAirport, setSelectedAirport] = useState(null);
   const [backendMessage, setBackendMessage] = useState(null);
+  const [isMethodologyOpen, setIsMethodologyOpen] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -97,18 +101,46 @@ function App() {
     };
   }, []);
 
-  const topDelayed = useMemo(() => {
+  const enrichedAirports = useMemo(() => {
     if (!data?.allAirports) return [];
     const hubMetrics = new Map((data.hubs || []).map(hub => [hub.iata, hub]));
-    return data.allAirports
+    const routeDegree = new Map();
+    for (const route of data.routes || []) {
+      routeDegree.set(route.origin, (routeDegree.get(route.origin) || 0) + 1);
+      routeDegree.set(route.destination, (routeDegree.get(route.destination) || 0) + 1);
+    }
+
+    return data.allAirports.map(airport => {
+      const hub = hubMetrics.get(airport.iata);
+      if (hub) return { ...airport, ...hub };
+      const connectedAirportsCount = routeDegree.get(airport.iata) || 0;
+      return {
+        ...airport,
+        connectedAirports: [],
+        affectedAirportsCount: airport.isDisrupted ? connectedAirportsCount : 0,
+        averageDelayMinutes: airport.delayMinutes || 0,
+        hubConnectivityScore: connectedAirportsCount,
+        hubImpactScore: 0,
+      };
+    });
+  }, [data]);
+
+  const topDelayed = useMemo(() => {
+    if (!enrichedAirports.length) return [];
+    return enrichedAirports
       .filter(airport => airport.isDisrupted)
-      .map(airport => ({ ...airport, ...(hubMetrics.get(airport.iata) || {}) }))
       .sort((a, b) => b.delayMinutes - a.delayMinutes || (b.hubImpactScore || 0) - (a.hubImpactScore || 0))
       .slice(0, 6);
-  }, [data]);
+  }, [enrichedAirports]);
 
   const disruptedHubs = data?.hubs?.filter(hub => hub.isDisrupted) || [];
   const affectedAirports = new Set(disruptedHubs.flatMap(hub => hub.connectedAirports.map(airport => airport.iata))).size;
+  const selectedAirportView = enrichedAirports.find(airport => airport.iata === selectedAirport?.iata) || selectedAirport;
+
+  function handleAirportSelect(airport) {
+    const enriched = enrichedAirports.find(item => item.iata === airport.iata) || airport;
+    setSelectedAirport(enriched);
+  }
 
   return (
     <div className="app-shell">
@@ -137,6 +169,13 @@ function App() {
 
         {backendMessage && <div className="alert warning">{backendMessage}</div>}
 
+        <section className="control-bar" aria-label="Airport search and methodology controls">
+          <AirportSearch airports={enrichedAirports} onSelect={handleAirportSelect} />
+          <button className="methodology-button" type="button" onClick={() => setIsMethodologyOpen(true)}>
+            Methodology
+          </button>
+        </section>
+
         <section className="metric-strip" aria-label="Operational overview">
           <div className="metric-card"><span>Monitored airports</span><strong>{data?.allAirports?.length ?? '—'}</strong></div>
           <div className="metric-card"><span>Major hubs</span><strong>{data?.hubs?.length ?? '—'}</strong></div>
@@ -146,35 +185,60 @@ function App() {
 
         <section className="dashboard-grid primary-grid">
           <div className="card map-card">
-            <MapView airports={data?.allAirports || []} sourceMode={data?.sourceMode} onSelect={setSelectedAirport} />
+            <MapView
+              airports={enrichedAirports}
+              selectedAirport={selectedAirportView}
+              sourceMode={data?.sourceMode}
+              onSelect={handleAirportSelect}
+            />
           </div>
           <div className="card">
-            <HubImpact hubs={data?.hubs || []} sourceMode={data?.sourceMode} onSelect={setSelectedAirport} />
+            <HubImpact hubs={data?.hubs || []} sourceMode={data?.sourceMode} onSelect={handleAirportSelect} />
           </div>
         </section>
 
         <section className="dashboard-grid secondary-grid">
           <div className="card">
-            <TopDelays topDelayed={topDelayed} onSelect={setSelectedAirport} />
+            <TopDelays topDelayed={topDelayed} onSelect={handleAirportSelect} />
           </div>
           <div className="card network-card">
             <NetworkView
               hubs={data?.hubs || []}
-              airports={data?.allAirports || []}
-              selectedAirport={selectedAirport}
-              onSelect={setSelectedAirport}
+              airports={enrichedAirports}
+              selectedAirport={selectedAirportView}
+              onSelect={handleAirportSelect}
             />
           </div>
           <div className="card">
-            <AirportDetail airport={selectedAirport} sourceMode={data?.sourceMode} />
+            <AirportDetail airport={selectedAirportView} sourceMode={data?.sourceMode} faaUpdatedAt={data?.faaUpdatedAt} />
           </div>
+        </section>
+
+        <section className="dashboard-grid insight-grid">
+          <div className="card">
+            <TrendPanel airport={selectedAirportView} sourceMode={data?.sourceMode} />
+          </div>
+          <section className="card about-card">
+            <span className="section-kicker">About this project</span>
+            <h2>Transportation Analytics & Network Science</h2>
+            <p>
+              This project combines live FAA airport advisories, route network data, and custom network impact scoring
+              to explore how hub disruptions may affect the broader U.S. air transportation system.
+            </p>
+          </section>
         </section>
       </main>
 
       <footer className="app-footer">
         <span>{data?.notice || 'FAA data shows airport-level operational status, not every individual flight.'}</span>
-        <span>Static local route network · Estimated impact score</span>
+        <span>Built with React, Leaflet, D3, Node.js/Express, Render, and GitHub Pages.</span>
       </footer>
+      {isMethodologyOpen && (
+        <MethodologyModal
+          refreshIntervalMinutes={data?.refreshIntervalMinutes || 5}
+          onClose={() => setIsMethodologyOpen(false)}
+        />
+      )}
     </div>
   );
 }

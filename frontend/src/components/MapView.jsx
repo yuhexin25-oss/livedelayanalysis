@@ -1,4 +1,5 @@
-import { CircleMarker, MapContainer, Popup, TileLayer, Tooltip } from 'react-leaflet';
+import { useEffect } from 'react';
+import { CircleMarker, MapContainer, Popup, TileLayer, Tooltip, useMap } from 'react-leaflet';
 
 const severityStyles = {
   green: { color: '#45d483', fillColor: '#45d483' },
@@ -7,7 +8,21 @@ const severityStyles = {
   red: { color: '#ff5d73', fillColor: '#ff5d73' },
 };
 
-export default function MapView({ airports, sourceMode, onSelect }) {
+function MapFocus({ selectedAirport }) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!selectedAirport?.lat || !selectedAirport?.lon) return;
+    map.flyTo([selectedAirport.lat, selectedAirport.lon], Math.max(map.getZoom(), 6), {
+      animate: true,
+      duration: 0.9,
+    });
+  }, [map, selectedAirport]);
+
+  return null;
+}
+
+export default function MapView({ airports, selectedAirport, sourceMode, onSelect }) {
   return (
     <div className="map-wrapper">
       <div className="map-overlay">
@@ -27,19 +42,23 @@ export default function MapView({ airports, sourceMode, onSelect }) {
           attribution='&copy; OpenStreetMap &copy; CARTO'
           url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
         />
+        <MapFocus selectedAirport={selectedAirport} />
         {airports.map(airport => (
           <CircleMarker
             key={airport.iata}
             center={[airport.lat, airport.lon]}
-            radius={airport.isHub ? 9 : 5}
+            radius={selectedAirport?.iata === airport.iata ? 15 : airport.isHub ? 9 : 5}
             pathOptions={{
               ...(severityStyles[airport.severity] || severityStyles.green),
               fillOpacity: airport.isHub ? 0.9 : 0.55,
-              weight: airport.isHub ? 2 : 1,
+              weight: selectedAirport?.iata === airport.iata ? 4 : airport.isHub ? 2 : 1,
+              opacity: 1,
             }}
             eventHandlers={{ click: () => onSelect(airport) }}
           >
-            {airport.isHub && <Tooltip direction="top" offset={[0, -8]} opacity={0.9}>{airport.iata}</Tooltip>}
+            <Tooltip direction="top" offset={[0, -10]} opacity={1} className="airport-tooltip" sticky>
+              {airport.iata} · {airport.disruptionType}
+            </Tooltip>
             <Popup>
               <strong>{airport.iata} · {airport.name}</strong><br />
               {airport.disruptionType}<br />

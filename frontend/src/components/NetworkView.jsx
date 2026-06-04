@@ -55,7 +55,13 @@ export default function NetworkView({ hubs, airports, selectedAirport, onSelect 
               </g>
             ))}
           </svg>
-          <p className="panel-footnote">Connections show potential downstream exposure, not confirmed flight delays.</p>
+          <p className="network-examples">
+            {graph.nodes.slice(0, 4).map(node => `${graph.hub.iata} → ${node.iata}`).join('   ')}
+          </p>
+          <p className="panel-footnote">
+            Estimated propagation network based on static route connectivity. Links show potential downstream exposure,
+            not confirmed flight delays.
+          </p>
         </>
       )}
     </div>

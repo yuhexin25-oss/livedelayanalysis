@@ -4,13 +4,13 @@ export default function WelcomePage({ sourceMode }) {
   return (
     <section className="welcome-card">
       <div>
-        <span className="section-kicker">Welcome</span>
-        <h2>See where a hub disruption could travel next.</h2>
+        <span className="section-kicker">Research framing</span>
+        <h2>How does a disruption at a major hub ripple through the U.S. air transportation network?</h2>
       </div>
       <p>
-        Hub Resilience Monitor combines {isLive ? 'live FAA airport advisories' : 'sample airport status scenarios'} with
-        a static local route network to estimate operational ripple effects across major U.S. hubs. It is an airport-level
-        awareness tool, not a flight tracker.
+        This dashboard estimates how delays at hub airports may propagate through connected airports using
+        {isLive ? ' FAA operational advisories' : ' sample airport status scenarios'} and route network connectivity.
+        It is an airport-level awareness and analytics tool, not a flight tracker.
       </p>
       <div className="provenance-row">
         <span><i className={`provenance-dot ${isLive ? 'live-dot' : 'estimate-dot'}`} />{isLive ? 'Live FAA status' : 'Sample status data'}</span>

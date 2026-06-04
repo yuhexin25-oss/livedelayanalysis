@@ -1,4 +1,10 @@
-export default function AirportDetail({ airport, sourceMode }) {
+function formatTime(value) {
+  if (!value) return 'Not available';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+}
+
+export default function AirportDetail({ airport, sourceMode, faaUpdatedAt }) {
   if (!airport) {
     return (
       <div>
@@ -22,12 +28,15 @@ export default function AirportDetail({ airport, sourceMode }) {
       <div className="detail-grid">
         <div><span>Reported delay</span><strong>{airport.delayMinutes || 0} min</strong></div>
         <div><span>Impact score</span><strong>{airport.hubImpactScore ?? 'N/A'}</strong></div>
-        <div><span>Affected airports</span><strong>{airport.affectedAirportsCount ?? 'N/A'}</strong></div>
-        <div><span>Connectivity</span><strong>{airport.hubConnectivityScore ?? 'N/A'}</strong></div>
+        <div><span>Connected airports</span><strong>{airport.connectedAirports?.length ?? airport.hubConnectivityScore ?? 'N/A'}</strong></div>
+        <div><span>Major hub</span><strong>{airport.isHub ? 'Yes' : 'No'}</strong></div>
+        <div><span>Severity level</span><strong>{airport.severity}</strong></div>
+        <div><span>FAA update</span><strong>{formatTime(faaUpdatedAt)}</strong></div>
       </div>
       <div className="advisory-box">
         <span>{sourceMode === 'live' ? 'FAA airport status advisory' : 'Sample airport status advisory'}</span>
         <p>{airport.status}</p>
+        <small>Disruption type: {airport.disruptionType}</small>
         {airport.trend && <small>Trend: {airport.trend}</small>}
       </div>
       <p className="panel-footnote">This is airport-level operational status, not the status of every flight.</p>
