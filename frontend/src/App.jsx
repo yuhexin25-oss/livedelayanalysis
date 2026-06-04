@@ -121,7 +121,6 @@ function MethodologyContent({ refreshIntervalMinutes, onOpenModal }) {
           <span className="section-kicker">Primary architecture</span>
           <h2>Operational Flight-Delay Metrics</h2>
           <p className="page-copy">
-            The scoring layer is built around normalized departure delay, arrival delay, cancellation environment,
             The scoring layer focuses on airport network resilience, hub disruption propagation, and route-level
             operational exposure. FlightAware can remain optional in the backend, but the main experience does not
             depend on individual flight tracking.

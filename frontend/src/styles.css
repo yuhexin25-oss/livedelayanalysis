@@ -690,6 +690,19 @@ h2 { margin: 5px 0 0; font-size: 1.02rem; letter-spacing: -0.02em; }
   font-family: "IBM Plex Mono", monospace;
 }
 
+.risk-check {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-top: 14px;
+  color: #a9bdd5;
+  font-size: 0.8rem;
+}
+
+.risk-check input {
+  accent-color: #4da3ff;
+}
+
 .risk-submit {
   width: 100%;
   margin-top: 16px;
