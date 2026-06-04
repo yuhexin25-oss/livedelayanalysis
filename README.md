@@ -64,6 +64,7 @@ The backend listens on `http://localhost:3000` and exposes:
 - `GET /api/health` JSON health and latest FAA source metadata
 - `GET /api/status` normalized dashboard JSON
 - `GET /api/flight-risk/:flightNumber` estimated flight risk JSON
+- `GET /api/provider-test` active provider diagnostics
 
 All backend routes, including errors and unknown routes, return JSON rather than HTML.
 
@@ -112,7 +113,27 @@ The backend tests cover FAA advisory parsing as supplemental data and operationa
 - Sample fallback operational status: `data/fallback_status.json`
 - GitHub Pages frontend fallback assets: `frontend/public/data/`
 
-If `FLIGHTAWARE_AEROAPI_KEY` or `AEROAPI_KEY` is configured on the backend, the provider layer can use FlightAware AeroAPI. Without credentials, the backend returns clearly labeled estimated operational metrics derived from available airport advisory delay signals and local network data.
+FlightAware integration uses:
+
+- Airport operational metrics: `GET https://aeroapi.flightaware.com/aeroapi/airports/{ICAO}/flights`
+- Flight number lookup: `GET https://aeroapi.flightaware.com/aeroapi/flights/{ident}`
+
+A FlightAware AeroAPI key is required. Set it on the backend as:
+
+```text
+FLIGHTAWARE_API_KEY=your_flightaware_aeroapi_key
+```
+
+The backend sends this key in the `x-apikey` request header. If `FLIGHTAWARE_API_KEY` is missing, invalid, or FlightAware calls fail, the backend keeps using `estimated-operational-metrics` and does not claim FlightAware data.
+
+Provider verification endpoints:
+
+```text
+GET /api/health
+GET /api/provider-test
+```
+
+`providerMode` and `dataProvider` are set to `flightaware` only when FlightAware AeroAPI data is actually active. Otherwise they remain `estimated-operational-metrics`.
 
 FAA data describes airport operational advisories, not every individual flight. Route connections model potential downstream exposure and do not prove that a connected airport or flight is delayed.
 
@@ -169,7 +190,20 @@ After Render deploys the service, verify that these URLs return JSON:
 ```text
 https://livedelayanalysis-backend.onrender.com/api/health
 https://livedelayanalysis-backend.onrender.com/api/status
+https://livedelayanalysis-backend.onrender.com/api/provider-test
 ```
+
+To add the FlightAware AeroAPI key in Render:
+
+1. Open the Render Dashboard.
+2. Select the `livedelayanalysis-backend` Web Service.
+3. Open `Environment`.
+4. Click `Add Environment Variable`.
+5. Set `Key` to `FLIGHTAWARE_API_KEY`.
+6. Set `Value` to your FlightAware AeroAPI key.
+7. Save changes.
+8. Trigger a manual deploy or wait for Render to redeploy.
+9. Open `/api/provider-test` and confirm `dataProvider` is `flightaware`.
 
 ### GitHub Pages Frontend
 

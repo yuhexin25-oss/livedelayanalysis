@@ -1,7 +1,12 @@
 import express from 'express';
 import cors from 'cors';
 import statusRouter from './routes/status.js';
-import { getFlightRiskAssessment, getLatestStatus, startStatusRefresh } from './services/statusService.js';
+import {
+  getFlightRiskAssessment,
+  getLatestStatus,
+  getProviderDiagnostics,
+  startStatusRefresh,
+} from './services/statusService.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -36,9 +41,14 @@ app.get('/api/health', (req, res) => {
     sourceMode: status.sourceMode,
     sourceLabel: status.sourceLabel,
     providerMode: status.providerMode,
+    dataProvider: status.dataProvider || status.providerMode,
     faaUpdatedAt: status.faaUpdatedAt,
     fetchedAt: status.fetchedAt,
   });
+});
+
+app.get('/api/provider-test', (req, res) => {
+  res.json(getProviderDiagnostics());
 });
 
 app.get('/', (req, res) => {
@@ -46,6 +56,7 @@ app.get('/', (req, res) => {
     message: 'Hub Resilience Monitor backend is running.',
     healthEndpoint: '/api/health',
     statusEndpoint: '/api/status',
+    providerTestEndpoint: '/api/provider-test',
   });
 });
 

@@ -26,6 +26,13 @@ let latestStatus = {
   routes: [],
 };
 
+let latestProviderInfo = {
+  configuredProvider: 'estimated-operational-metrics',
+  flightAwareApiKeyConfigured: false,
+  airportFlightsEndpoint: 'https://aeroapi.flightaware.com/aeroapi/airports/{ICAO}/flights',
+  flightStatusEndpoint: 'https://aeroapi.flightaware.com/aeroapi/flights/{ident}',
+};
+
 async function readJson(relativePath) {
   const filePath = path.resolve(__dirname, '../data', relativePath);
   const content = await fs.readFile(filePath, 'utf-8');
@@ -201,6 +208,7 @@ export async function buildDashboardData({ airports, routes, statuses, sourceMod
   const network = buildNetwork(routes);
   const airportByCode = new Map(airports.map(airport => [airport.iata, airport]));
   const flightDataProvider = createFlightDataProvider({ airports, routes, faaStatuses: normalizedStatuses });
+  latestProviderInfo = flightDataProvider.getProviderInfo();
   const metricsEntries = await Promise.all(airports.map(async airport => [
     airport.iata,
     await flightDataProvider.getAirportDelayMetrics(airport.iata),
@@ -273,7 +281,8 @@ export async function buildDashboardData({ airports, routes, statuses, sourceMod
     refreshIntervalMinutes: 5,
     notice: 'Operational delay risk is estimated from flight-delay metrics; FAA advisories are supplemental context, not NOTAM-based closure predictions.',
     methodology: 'Estimated Hub Impact Score = departure delay × 0.4 + arrival delay × 0.2 + cancellation rate × 200 + connected airports × 0.8 + ground stop bonus.',
-    providerMode: allAirports.some(airport => airport.provider === 'flightaware-aeroapi') ? 'flightaware-aeroapi' : 'estimated-operational-metrics',
+    providerMode: allAirports.some(airport => airport.provider === 'flightaware') ? 'flightaware' : 'estimated-operational-metrics',
+    dataProvider: allAirports.some(airport => airport.provider === 'flightaware') ? 'flightaware' : 'estimated-operational-metrics',
     hubs,
     allAirports,
     routes,
@@ -320,6 +329,37 @@ export async function refreshLiveStatus() {
 
 export function getLatestStatus() {
   return latestStatus;
+}
+
+export function getProviderDiagnostics() {
+  const dataProvider = latestStatus.dataProvider || latestStatus.providerMode || 'estimated-operational-metrics';
+  const sampleAirport = latestStatus.allAirports.find(airport => airport.provider === dataProvider)
+    || latestStatus.allAirports[0]
+    || null;
+
+  return {
+    ok: true,
+    dataProvider,
+    providerMode: dataProvider,
+    flightAwareApiKeyConfigured: latestProviderInfo.flightAwareApiKeyConfigured,
+    configuredProvider: latestProviderInfo.configuredProvider,
+    isFlightAwareActive: dataProvider === 'flightaware',
+    airportFlightsEndpoint: latestProviderInfo.airportFlightsEndpoint,
+    flightStatusEndpoint: latestProviderInfo.flightStatusEndpoint,
+    sampleAirport: sampleAirport ? {
+      airport: sampleAirport.iata,
+      provider: sampleAirport.provider,
+      providerAirportCode: sampleAirport.providerAirportCode,
+      departureDelayMinutes: sampleAirport.departureDelayMinutes,
+      arrivalDelayMinutes: sampleAirport.arrivalDelayMinutes,
+      totalFlights: sampleAirport.totalFlights,
+      delayedFlights: sampleAirport.delayedFlights,
+      timestamp: sampleAirport.timestamp,
+    } : null,
+    message: dataProvider === 'flightaware'
+      ? 'FlightAware AeroAPI is active for airport delay metrics.'
+      : 'FlightAware AeroAPI is not active; backend is using estimated operational metrics.',
+  };
 }
 
 function riskLevelFromScore(score) {

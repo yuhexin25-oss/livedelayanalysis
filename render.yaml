@@ -7,6 +7,9 @@ services:
     buildCommand: npm install
     startCommand: npm start
     healthCheckPath: /api/health
+    envVars:
+      - key: FLIGHTAWARE_API_KEY
+        sync: false
     autoDeployTrigger: commit
     previews:
       generation: 'off'

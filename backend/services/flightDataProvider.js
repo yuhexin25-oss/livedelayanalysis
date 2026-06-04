@@ -1,4 +1,6 @@
 const AEROAPI_BASE_URL = 'https://aeroapi.flightaware.com/aeroapi';
+const ESTIMATED_PROVIDER = 'estimated-operational-metrics';
+const FLIGHTAWARE_PROVIDER = 'flightaware';
 
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
@@ -10,6 +12,38 @@ function deterministicSeed(value) {
 
 function normalizeFlightNumber(flightNumber) {
   return String(flightNumber || '').trim().toUpperCase().replace(/\s+/g, '');
+}
+
+function flightAwareAirportCode(airport) {
+  if (airport?.icao) return airport.icao;
+  if (airport?.iata && airport.iata.length === 3) return `K${airport.iata}`;
+  return airport?.iata || '';
+}
+
+function normalizeAirportCodeFromFlightAware(value) {
+  const code = String(value || '').toUpperCase();
+  if (/^K[A-Z0-9]{3}$/.test(code)) return code.slice(1);
+  return code;
+}
+
+function minutesBetween(later, earlier) {
+  const laterTime = Date.parse(later || '');
+  const earlierTime = Date.parse(earlier || '');
+  if (Number.isNaN(laterTime) || Number.isNaN(earlierTime)) return 0;
+  return Math.max(0, Math.round((laterTime - earlierTime) / 60000));
+}
+
+function flightDelayMinutes(flight, phase) {
+  if (phase === 'departure') {
+    return minutesBetween(
+      flight.actual_out || flight.estimated_out || flight.actual_off || flight.estimated_off,
+      flight.scheduled_out || flight.scheduled_off,
+    );
+  }
+  return minutesBetween(
+    flight.actual_in || flight.estimated_in || flight.actual_on || flight.estimated_on,
+    flight.scheduled_in || flight.scheduled_on,
+  );
 }
 
 function fallbackFlightRoute(flightNumber, airports, routes) {
@@ -80,13 +114,17 @@ function estimateMetricsFromSupplementalFaa(iata, faaStatusMap) {
     groundStop: Boolean(advisory.groundStop),
     groundDelayProgram: Boolean(advisory.groundDelayProgram),
     timestamp: new Date().toISOString(),
-    provider: 'estimated-operational-metrics',
+    provider: ESTIMATED_PROVIDER,
     providerNote: 'Estimated metrics are derived from available airport advisory delay signals until a flight operations API is configured.',
   };
 }
 
-async function getAeroApiAirportMetrics(iata, apiKey) {
-  const response = await fetch(`${AEROAPI_BASE_URL}/airports/${iata}/flights?type=airline`, {
+async function getAeroApiAirportMetrics(airport, apiKey) {
+  const iata = airport.iata;
+  const aeroApiAirportCode = flightAwareAirportCode(airport);
+  const url = new URL(`${AEROAPI_BASE_URL}/airports/${encodeURIComponent(aeroApiAirportCode)}/flights`);
+  url.searchParams.set('max_pages', '1');
+  const response = await fetch(url, {
     headers: {
       Accept: 'application/json',
       'x-apikey': apiKey,
@@ -102,25 +140,35 @@ async function getAeroApiAirportMetrics(iata, apiKey) {
     ...(payload.scheduled_arrivals || []),
   ];
   const totalFlights = flights.length || 0;
-  const delayValues = flights
-    .map(flight => Number(flight.departure_delay || flight.arrival_delay || flight.delay || 0) / 60)
-    .filter(value => Number.isFinite(value) && value > 0);
+  const departureDelays = [
+    ...(payload.departures || []),
+    ...(payload.scheduled_departures || []),
+  ].map(flight => flightDelayMinutes(flight, 'departure')).filter(value => value > 0);
+  const arrivalDelays = [
+    ...(payload.arrivals || []),
+    ...(payload.scheduled_arrivals || []),
+  ].map(flight => flightDelayMinutes(flight, 'arrival')).filter(value => value > 0);
+  const delayValues = [...departureDelays, ...arrivalDelays];
   const cancelled = flights.filter(flight => /cancel/i.test(flight.status || '')).length;
-  const averageDelay = delayValues.length
-    ? Math.round(delayValues.reduce((sum, value) => sum + value, 0) / delayValues.length)
+  const averageDepartureDelay = departureDelays.length
+    ? Math.round(departureDelays.reduce((sum, value) => sum + value, 0) / departureDelays.length)
+    : 0;
+  const averageArrivalDelay = arrivalDelays.length
+    ? Math.round(arrivalDelays.reduce((sum, value) => sum + value, 0) / arrivalDelays.length)
     : 0;
 
   return {
     airport: iata,
-    departureDelayMinutes: averageDelay,
-    arrivalDelayMinutes: Math.round(averageDelay * 0.75),
+    departureDelayMinutes: averageDepartureDelay,
+    arrivalDelayMinutes: averageArrivalDelay,
     cancellationRate: totalFlights ? Number((cancelled / totalFlights).toFixed(3)) : 0,
     delayedFlights: delayValues.length,
     totalFlights,
     groundStop: false,
     groundDelayProgram: false,
     timestamp: new Date().toISOString(),
-    provider: 'flightaware-aeroapi',
+    provider: FLIGHTAWARE_PROVIDER,
+    providerAirportCode: aeroApiAirportCode,
   };
 }
 
@@ -139,19 +187,29 @@ async function getAeroApiFlightStatus(flightNumber, apiKey) {
   return {
     flightNumber: normalized,
     airline: flight.operator || flight.operator_iata || 'Unknown airline',
-    origin: flight.origin?.code_iata || flight.origin?.code || '',
-    destination: flight.destination?.code_iata || flight.destination?.code || '',
+    origin: normalizeAirportCodeFromFlightAware(flight.origin?.code_iata || flight.origin?.code || ''),
+    destination: normalizeAirportCodeFromFlightAware(flight.destination?.code_iata || flight.destination?.code || ''),
     status: flight.status || 'Status unavailable',
-    provider: 'flightaware-aeroapi',
+    provider: FLIGHTAWARE_PROVIDER,
   };
 }
 
 export function createFlightDataProvider({ airports, routes, faaStatuses = [] }) {
   const faaStatusMap = new Map(faaStatuses.map(status => [status.airportCode, status]));
+  const airportByCode = new Map(airports.map(airport => [airport.iata, airport]));
   const airportCodes = new Set(airports.map(airport => airport.iata));
-  const aeroApiKey = process.env.FLIGHTAWARE_AEROAPI_KEY || process.env.AEROAPI_KEY || '';
+  const aeroApiKey = process.env.FLIGHTAWARE_API_KEY || '';
 
   return {
+    getProviderInfo() {
+      return {
+        configuredProvider: aeroApiKey ? FLIGHTAWARE_PROVIDER : ESTIMATED_PROVIDER,
+        flightAwareApiKeyConfigured: Boolean(aeroApiKey),
+        airportFlightsEndpoint: `${AEROAPI_BASE_URL}/airports/{ICAO}/flights`,
+        flightStatusEndpoint: `${AEROAPI_BASE_URL}/flights/{ident}`,
+      };
+    },
+
     async getAirportOperationalStatus(iata) {
       const code = String(iata || '').toUpperCase();
       const advisory = advisoryForAirport(faaStatusMap, code);
@@ -172,9 +230,10 @@ export function createFlightDataProvider({ airports, routes, faaStatuses = [] })
     async getAirportDelayMetrics(iata) {
       const code = String(iata || '').toUpperCase();
       if (!airportCodes.has(code)) throw new Error(`Unknown airport ${code}`);
+      const airport = airportByCode.get(code);
       if (aeroApiKey) {
         try {
-          const metrics = await getAeroApiAirportMetrics(code, aeroApiKey);
+          const metrics = await getAeroApiAirportMetrics(airport, aeroApiKey);
           const advisory = advisoryForAirport(faaStatusMap, code);
           return {
             ...metrics,
