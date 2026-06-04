@@ -713,29 +713,6 @@ h2 { margin: 5px 0 0; font-size: 1.02rem; letter-spacing: -0.02em; }
   opacity: 0.65;
 }
 
-.sample-flight-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 14px;
-}
-
-.sample-flight-row button {
-  padding: 7px 10px;
-  border: 1px solid #26374a;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.03);
-  color: #a9bdd5;
-  cursor: pointer;
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 0.7rem;
-}
-
-.sample-flight-row button:hover {
-  border-color: #4da3ff;
-  color: #e5f1ff;
-}
-
 .risk-summary-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -798,9 +775,12 @@ h2 { margin: 5px 0 0; font-size: 1.02rem; letter-spacing: -0.02em; }
   display: grid;
   grid-template-columns: 1fr 0.95fr;
   gap: 14px;
+  margin-top: 16px;
 }
 
 .risk-details-grid h3,
+.risk-driver-card h3,
+.contribution-summary h3,
 .risk-explainer h3 {
   margin: 0 0 10px;
   color: #e5f1ff;
@@ -830,8 +810,98 @@ h2 { margin: 5px 0 0; font-size: 1.02rem; letter-spacing: -0.02em; }
 }
 
 .risk-recommendation small {
+  display: block;
+  margin-top: 12px;
   color: #7f94ae;
   line-height: 1.5;
+}
+
+.risk-driver-card {
+  margin-top: 16px;
+  padding: 14px;
+  border: 1px solid #223246;
+  border-radius: 16px;
+  background: rgba(6, 14, 24, 0.72);
+}
+
+.risk-driver-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.risk-driver {
+  padding: 12px;
+  border: 1px solid #17263a;
+  border-radius: 14px;
+  background: rgba(9, 18, 30, 0.92);
+}
+
+.risk-driver-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.risk-driver h4 {
+  margin: 0 0 8px;
+  color: #e5f1ff;
+  font-size: 0.9rem;
+}
+
+.risk-driver strong {
+  color: #f6d365;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 1.1rem;
+  font-weight: 500;
+}
+
+.risk-driver p {
+  margin: 12px 0 0;
+  color: #98abc2;
+  line-height: 1.58;
+}
+
+.contribution-summary {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+  padding: 14px;
+  border: 1px solid rgba(77, 163, 255, 0.18);
+  border-radius: 16px;
+  background: rgba(77, 163, 255, 0.05);
+}
+
+.contribution-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  color: #aabdd3;
+}
+
+.contribution-row span {
+  color: #8297b0;
+}
+
+.contribution-row strong {
+  color: #e5f1ff;
+  font-family: "IBM Plex Mono", monospace;
+  font-weight: 500;
+}
+
+.contribution-total {
+  margin-top: 4px;
+  padding-top: 12px;
+  border-bottom: 0;
+  border-top: 1px solid rgba(77, 163, 255, 0.2);
+}
+
+.contribution-total span,
+.contribution-total strong {
+  color: #f6d365;
 }
 
 .risk-explainer {
@@ -1064,7 +1134,7 @@ h2 { margin: 5px 0 0; font-size: 1.02rem; letter-spacing: -0.02em; }
   .map-overlay { align-items: flex-start; flex-direction: column; }
   .app-footer { flex-direction: column; }
   .methodology-grid, .hub-summary-grid { grid-template-columns: 1fr; }
-  .risk-summary-grid, .risk-details-grid { grid-template-columns: 1fr; }
+  .risk-summary-grid, .risk-details-grid, .risk-driver-list { grid-template-columns: 1fr; }
   .welcome-landing { min-height: auto; }
   .welcome-actions button { width: 100%; }
 }

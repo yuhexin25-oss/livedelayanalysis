@@ -9,12 +9,24 @@ function riskLabel(score) {
   return 'Low';
 }
 
+function clamp(value, min = 0, max = 100) {
+  return Math.min(max, Math.max(min, value));
+}
+
 function formatAirportLabel(airport) {
   return airport ? `${airport.iata} - ${airport.name}` : '';
 }
 
 function airportDelay(airport) {
   return Math.max(airport?.departureDelayMinutes || 0, airport?.arrivalDelayMinutes || 0);
+}
+
+function formatDelayPhrase(airport) {
+  const delay = airportDelay(airport);
+  if (delay >= 60) return 'critical operational delay conditions';
+  if (delay >= 30) return 'elevated operational delay conditions';
+  if (delay >= 15) return 'moderate operational delay conditions';
+  return 'normal commercial operational conditions';
 }
 
 function routeExists(routes, origin, destination) {
@@ -57,21 +69,31 @@ function buildRouteAssessment({ origin, destination, routes, airports, connectio
   const destinationConnectivity = destination.connectedAirports?.length || destination.hubConnectivityScore || connectedCodes(routes, destination.iata).size;
   const networkConnectivityRisk = Math.min(100, Math.round((originConnectivity + destinationConnectivity) * 4));
   const hubExposureScore = Math.min(100, Math.round(Math.max(origin.hubImpactScore || 0, destination.hubImpactScore || 0, ...sharedConnections.map(airport => airport.hubImpactScore || 0))));
-  const delayRisk = Math.max(airportDelay(origin), airportDelay(destination));
-  const cancellationRisk = Math.max(origin.cancellationRate || 0, destination.cancellationRate || 0) * 200;
   const groundProgramBonus = origin.groundStop || destination.groundStop ? 25 : origin.groundDelayProgram || destination.groundDelayProgram ? 12 : 0;
   const connectionComplexity = connectionPreference === 'Direct' ? (directRoute ? 4 : 18)
     : connectionPreference === 'One-stop' ? 12
       : directRoute ? 6 : 14;
 
-  const routeRiskScore = Math.min(100, Math.round(
-    delayRisk * 0.45
-    + cancellationRisk
-    + hubExposureScore * 0.3
-    + networkConnectivityRisk * 0.2
-    + connectionComplexity
-    + groundProgramBonus,
-  ));
+  const originDelayContribution = clamp(Math.round(
+    airportDelay(origin) * 0.28
+    + (origin.cancellationRate || 0) * 90
+    + (origin.groundStop ? 10 : origin.groundDelayProgram ? 5 : 0),
+  ), 0, 35);
+  const destinationDelayContribution = clamp(Math.round(
+    airportDelay(destination) * 0.24
+    + (destination.cancellationRate || 0) * 80
+    + (destination.groundStop ? 9 : destination.groundDelayProgram ? 4 : 0),
+  ), 0, 30);
+  const hubConnectivityContribution = clamp(Math.round(hubExposureScore * 0.22), 0, 24);
+  const networkPropagationContribution = clamp(Math.round(networkConnectivityRisk * 0.16 + connectionComplexity), 0, 24);
+  const faaAdvisoryContribution = clamp(groundProgramBonus, 0, 25);
+  const routeRiskScore = clamp(
+    originDelayContribution
+    + destinationDelayContribution
+    + hubConnectivityContribution
+    + networkPropagationContribution
+    + faaAdvisoryContribution,
+  );
   const riskLevel = riskLabel(routeRiskScore);
 
   const reasons = [];
@@ -87,13 +109,74 @@ function buildRouteAssessment({ origin, destination, routes, airports, connectio
     reasons.push(`Potential one-stop paths include elevated-risk hub${highRiskConnections.length > 1 ? 's' : ''}: ${highRiskConnections.map(airport => airport.iata).join(', ')}.`);
   }
 
-  const suggestedRoutingStrategy = highRiskConnections.length && avoidDisruptedHubs
-    ? `Avoid connecting through ${highRiskConnections.map(airport => airport.iata).join(', ')} if schedule reliability matters.`
-    : directRoute && connectionPreference !== 'One-stop'
-      ? 'Prefer direct routing to reduce connection exposure.'
-      : candidateConnections.length
-        ? `Consider one-stop options through lower-risk hubs such as ${candidateConnections.slice(0, 3).map(airport => airport.iata).join(', ')}.`
-        : 'Monitor both endpoint airports and choose the simplest available routing.';
+  const advisoryExplanation = origin.groundStop || destination.groundStop
+    ? 'A FAA ground stop signal is active at one endpoint, which substantially increases operational risk context.'
+    : origin.groundDelayProgram || destination.groundDelayProgram
+      ? 'A FAA ground delay program signal is active at one endpoint, adding advisory context to the route.'
+      : 'No FAA ground stop or ground delay program signal is active for the selected endpoint airports.';
+
+  const drivers = [
+    {
+      title: 'Origin Operational Delay',
+      severity: riskLabel(originDelayContribution * 3),
+      contribution: originDelayContribution,
+      explanation: `${origin.iata} currently shows ${formatDelayPhrase(origin)} based on airport-level delay and cancellation environment.`,
+    },
+    {
+      title: 'Destination Operational Delay',
+      severity: riskLabel(destinationDelayContribution * 3),
+      contribution: destinationDelayContribution,
+      explanation: `${destination.iata} currently shows ${formatDelayPhrase(destination)} at the destination side of the route.`,
+    },
+    {
+      title: 'Hub Connectivity Exposure',
+      severity: riskLabel(hubConnectivityContribution * 4),
+      contribution: hubConnectivityContribution,
+      explanation: `${origin.iata} and ${destination.iata} are evaluated against major hub status and hub impact scores to estimate exposure to broader airport congestion.`,
+    },
+    {
+      title: 'Network Propagation Risk',
+      severity: riskLabel(networkPropagationContribution * 4),
+      contribution: networkPropagationContribution,
+      explanation: `The selected airports connect to ${originConnectivity + destinationConnectivity} static route-network neighbors, so disruption can affect more downstream airport pairs.`,
+    },
+    {
+      title: 'FAA Ground Stop / GDP Advisory',
+      severity: riskLabel(faaAdvisoryContribution * 4),
+      contribution: faaAdvisoryContribution,
+      explanation: advisoryExplanation,
+    },
+  ];
+
+  const contributionSummary = [
+    { label: 'Origin Delay Environment', value: originDelayContribution },
+    { label: 'Destination Delay Environment', value: destinationDelayContribution },
+    { label: 'Hub Connectivity Exposure', value: hubConnectivityContribution },
+    { label: 'Network Propagation Risk', value: networkPropagationContribution },
+    { label: 'FAA Advisory Context', value: faaAdvisoryContribution },
+  ];
+
+  const recommendations = [];
+  if (directRoute && connectionPreference !== 'One-stop') {
+    recommendations.push('Prefer direct routing when possible to reduce connection exposure.');
+  }
+  if (highRiskConnections.length && avoidDisruptedHubs) {
+    recommendations.push(`Avoid adding connections through elevated-risk hubs such as ${highRiskConnections.map(airport => airport.iata).join(', ')}.`);
+  }
+  if (!directRoute && candidateConnections.length) {
+    recommendations.push(`If a connection is needed, compare lower-risk hubs such as ${candidateConnections.slice(0, 3).map(airport => airport.iata).join(', ')}.`);
+  }
+  if (faaAdvisoryContribution > 0) {
+    recommendations.push('Monitor FAA operational advisories if traveling through an endpoint with active ground stop or GDP context.');
+  }
+  if (destinationDelayContribution <= 6 && originDelayContribution > destinationDelayContribution) {
+    recommendations.push('Destination airport appears stable; main risk comes from origin airport conditions or hub exposure.');
+  } else if (destinationDelayContribution >= 12) {
+    recommendations.push('Destination airport conditions are a meaningful part of the route risk; monitor arrival-side advisories before departure.');
+  }
+  if (!recommendations.length) {
+    recommendations.push('Monitor both endpoint airports and choose the simplest available routing.');
+  }
 
   return {
     origin,
@@ -107,8 +190,10 @@ function buildRouteAssessment({ origin, destination, routes, airports, connectio
     destinationAirportRisk: riskLabel(destination.hubImpactScore || airportDelay(destination)),
     hubExposureScore,
     networkConnectivityRisk,
-    suggestedRoutingStrategy,
+    recommendations,
     reasons,
+    drivers,
+    contributionSummary,
   };
 }
 
@@ -238,6 +323,38 @@ export default function RouteRiskAnalyzer({ airports, routes, providerMode }) {
                 <i style={{ width: `${assessment.routeRiskScore}%` }} />
               </div>
 
+              <section className="risk-driver-card">
+                <h3>Potential Delay Drivers</h3>
+                <div className="risk-driver-list">
+                  {assessment.drivers.map(driver => (
+                    <article className="risk-driver" key={driver.title}>
+                      <div className="risk-driver-header">
+                        <div>
+                          <h4>{driver.title}</h4>
+                          <span className={`risk-level risk-${driver.severity.toLowerCase()}`}>Severity: {driver.severity}</span>
+                        </div>
+                        <strong>+{driver.contribution}</strong>
+                      </div>
+                      <p>{driver.explanation}</p>
+                    </article>
+                  ))}
+                </div>
+              </section>
+
+              <section className="contribution-summary">
+                <h3>Contribution Summary</h3>
+                {assessment.contributionSummary.map(item => (
+                  <div className="contribution-row" key={item.label}>
+                    <span>{item.label}</span>
+                    <strong>+{item.value}</strong>
+                  </div>
+                ))}
+                <div className="contribution-row contribution-total">
+                  <span>Total Route Risk Score</span>
+                  <strong>{assessment.routeRiskScore} / 100</strong>
+                </div>
+              </section>
+
               <div className="risk-details-grid">
                 <div>
                   <h3>Reason</h3>
@@ -247,7 +364,9 @@ export default function RouteRiskAnalyzer({ airports, routes, providerMode }) {
                 </div>
                 <div className="risk-recommendation">
                   <h3>Suggested Routing Strategy</h3>
-                  <p>{assessment.suggestedRoutingStrategy}</p>
+                  <ul className="risk-factors">
+                    {assessment.recommendations.map(recommendation => <li key={recommendation}>{recommendation}</li>)}
+                  </ul>
                   {airlinePreference && <small>Airline preference: {airlinePreference}</small>}
                 </div>
               </div>
@@ -258,6 +377,15 @@ export default function RouteRiskAnalyzer({ airports, routes, providerMode }) {
                 <div><span>Hub Exposure Score</span><strong>{assessment.hubExposureScore}</strong><small>Endpoint and candidate hub exposure</small></div>
                 <div><span>Network Connectivity Risk</span><strong>{assessment.networkConnectivityRisk}</strong><small>Static route degree sensitivity</small></div>
               </div>
+
+              <details className="risk-explainer">
+                <summary>How is this risk estimated?</summary>
+                <p>
+                  This score is an analytical estimate based on airport-level operational status, hub connectivity,
+                  route exposure, and FAA advisory context. It is not an official FAA prediction and does not use live
+                  ticket inventory or airline rebooking data.
+                </p>
+              </details>
             </>
           ) : (
             <p className="no-data">Choose two different airports to calculate route risk.</p>
