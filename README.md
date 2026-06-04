@@ -1,27 +1,31 @@
 # Hub Resilience Monitor
 
-Hub Resilience Monitor is a real-time U.S. airport delay and hub disruption dashboard. It combines FAA airport-level operational advisories with a static local route network to estimate how disruptions at major hubs may affect connected airports.
+Hub Resilience Monitor is a **Real-Time Airport and Flight Delay Risk Platform** for GIS and aviation analytics portfolios. It combines operational delay metrics, supplemental FAA airport advisories, static route network data, and estimated network impact scoring to explore delay propagation, hub vulnerability, and airport network resilience.
 
 **Live dashboard:** <https://yuhexin25-oss.github.io/livedelayanalysis/>
 
 The dashboard is explicit about provenance:
 
-- **Live FAA airport status** is fetched from the FAA every five minutes.
+- **Operational delay metrics** drive severity and Hub Impact Score.
+- **FAA airport advisories** are supplemental context for ground stops, ground delay programs, and operational awareness.
 - **Static route network data** is stored locally in `data/`.
-- **Hub Impact Score** is an estimate, not an FAA metric or a confirmed flight-delay forecast.
+- **Hub Impact Score and Flight Risk Score** are analytical estimates, not FAA metrics or confirmed flight-delay forecasts.
 - **Fallback status data** is clearly labeled as sample data and is never presented as live.
+
+The project no longer uses FAA NOTAM-style keyword matching such as `CLSD`, `RWY CLSD`, or `AP CLSD` as the primary disruption signal.
 
 GitHub Pages hosts only the static React frontend. It does not run the Node.js/Express backend. Without a separately deployed backend URL, the dashboard automatically operates in clearly labeled sample data mode.
 
 ## Features
 
 - Welcome and methodology overview
-- Live U.S. airport delay map using Leaflet
-- Top delayed airports ranking
-- Major hub disruption monitoring
-- Estimated Hub Impact Score
-- D3-based delay propagation network for connected airports
-- Airport detail panel
+- Live airport operational risk map using Leaflet
+- Flight Risk Checker for flight numbers such as `DL567`, `AA102`, and `UA2184`
+- Top elevated-risk airports ranking
+- Major hub vulnerability and connectivity analysis
+- Estimated Hub Impact Score with Low / Moderate / High / Critical classes
+- D3-based hub network exposure visualization
+- Airport detail panel with operational metrics and supplemental FAA advisory text
 - Five-minute backend cache and sample fallback data
 
 Major hubs monitored: ATL, ORD, DFW, DEN, LAX, JFK, EWR, SFO, SEA, CLT, PHX, IAH, LAS, and MIA.
@@ -59,6 +63,7 @@ The backend listens on `http://localhost:3000` and exposes:
 - `GET /` health message
 - `GET /api/health` JSON health and latest FAA source metadata
 - `GET /api/status` normalized dashboard JSON
+- `GET /api/flight-risk/:flightNumber` estimated flight risk JSON
 
 All backend routes, including errors and unknown routes, return JSON rather than HTML.
 
@@ -96,30 +101,42 @@ cd backend
 npm test
 ```
 
-The backend tests cover the FAA category-based XML parser and hub impact behavior.
+The backend tests cover FAA advisory parsing as supplemental data and operational hub impact behavior.
 
 ## Data Sources
 
-- FAA live airport status API: <https://nasstatus.faa.gov/api/airport-status-information>
+- FlightAware AeroAPI-ready provider abstraction: `backend/services/flightDataProvider.js`
+- FAA live airport status API, used as supplemental advisory context: <https://nasstatus.faa.gov/api/airport-status-information>
 - Local airport metadata: `data/airports.json`
 - Local static route network: `data/routes.json`
 - Sample fallback operational status: `data/fallback_status.json`
 - GitHub Pages frontend fallback assets: `frontend/public/data/`
 
-FAA data describes current airport operational advisories, not every individual flight. Route connections model potential downstream exposure and do not prove that a connected airport or flight is delayed.
+If `FLIGHTAWARE_AEROAPI_KEY` or `AEROAPI_KEY` is configured on the backend, the provider layer can use FlightAware AeroAPI. Without credentials, the backend returns clearly labeled estimated operational metrics derived from available airport advisory delay signals and local network data.
+
+FAA data describes airport operational advisories, not every individual flight. Route connections model potential downstream exposure and do not prove that a connected airport or flight is delayed.
 
 ## Hub Impact Score
 
-The estimated score is calculated only for disrupted hubs:
+The estimated score is calculated for major hubs:
 
 ```text
 hub_impact_score =
-  delay_minutes * 0.5 +
-  affected_airports_count * 2 +
-  hub_connectivity_score * 0.3
+  departure_delay_minutes * 0.4 +
+  arrival_delay_minutes * 0.2 +
+  cancellation_rate * 200 +
+  connected_airports * 0.8 +
+  ground_stop_bonus
 ```
 
-`affected_airports_count` is the number of locally modeled airports connected to a disrupted hub. `hub_connectivity_score` is the hub's degree in the static route network.
+Classification:
+
+- `0-25` = Low
+- `25-50` = Moderate
+- `50-75` = High
+- `75+` = Critical
+
+`connected_airports` is the hub's degree in the static route network. FAA ground stops can add a ground stop bonus, but raw FAA advisory text is not treated as a primary airport-closure signal.
 
 ## Deployment
 

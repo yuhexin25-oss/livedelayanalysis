@@ -4,7 +4,7 @@ export default function HubImpact({ hubs, sourceMode, onSelect }) {
   const maxScore = Math.max(...ranked.map(hub => hub.hubImpactScore), 1);
   const mostCritical = ranked[0];
   const averageDelay = hubs.length
-    ? Math.round(hubs.reduce((sum, hub) => sum + (hub.delayMinutes || 0), 0) / hubs.length)
+    ? Math.round(hubs.reduce((sum, hub) => sum + Math.max(hub.departureDelayMinutes || 0, hub.arrivalDelayMinutes || 0), 0) / hubs.length)
     : 0;
   const affectedAirports = new Set(disrupted.flatMap(hub => hub.connectedAirports.map(airport => airport.iata))).size;
   const networkRiskIndex = hubs.length
@@ -18,9 +18,9 @@ export default function HubImpact({ hubs, sourceMode, onSelect }) {
           <span className="section-kicker">Estimated network effect</span>
           <h2>Hub Impact Score</h2>
         </div>
-        <span className="count-badge">{disrupted.length} disrupted</span>
+        <span className="count-badge">{disrupted.length} elevated</span>
       </div>
-      <p className="section-note">Delay minutes × 0.5 + affected airports × 2 + connectivity × 0.3</p>
+      <p className="section-note">Departure delay, arrival delay, cancellation environment, route connectivity, and ground stop bonus.</p>
       <div className="hub-summary-grid">
         <div><span>Most Critical Hub</span><strong>{mostCritical?.iata || '—'}</strong></div>
         <div><span>Average Delay</span><strong>{averageDelay} min</strong></div>
@@ -33,13 +33,13 @@ export default function HubImpact({ hubs, sourceMode, onSelect }) {
             <span className={`status-dot dot-${hub.severity}`} />
             <strong>{hub.iata}</strong>
             <span className="impact-track"><i style={{ width: `${(hub.hubImpactScore / maxScore) * 100}%` }} /></span>
-            <span>{hub.hubImpactScore.toFixed(1)}</span>
+            <span>{hub.hubImpactScore.toFixed(1)} · {hub.hubImpactClassification || 'Low'}</span>
           </button>
         ))}
       </div>
       <p className="panel-footnote">
-        Higher bars identify hubs where current delay signals intersect with larger static route connectivity.
-        Scores are estimates based on {sourceMode === 'live' ? ' live FAA signals' : ' sample status data'} and static local route connectivity.
+        Higher bars identify hubs where operational delay metrics intersect with larger static route connectivity.
+        FAA advisories are supplemental; the score is not an official FAA metric.
       </p>
     </div>
   );

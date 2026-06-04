@@ -1,170 +1,173 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
-const severityWeights = {
-  green: { origin: 0, destination: 0 },
-  yellow: { origin: 12, destination: 8 },
-  orange: { origin: 24, destination: 18 },
-  red: { origin: 38, destination: 30 },
+const sampleFlights = {
+  DL567: { airline: 'Delta Air Lines', origin: 'ATL', destination: 'LAX' },
+  AA102: { airline: 'American Airlines', origin: 'JFK', destination: 'LAX' },
+  UA2184: { airline: 'United Airlines', origin: 'DEN', destination: 'SFO' },
 };
 
-function clamp(value, min, max) {
-  return Math.min(Math.max(value, min), max);
-}
-
-function formatAirportLabel(airport) {
-  if (!airport) return '';
-  return `${airport.iata} - ${airport.name}`;
-}
-
-function getAirportConnectivity(airport, routeDegree) {
-  return airport?.connectedAirports?.length ?? airport?.hubConnectivityScore ?? routeDegree.get(airport?.iata) ?? 0;
-}
-
-function getRiskLevel(score) {
-  if (score >= 70) return 'High';
-  if (score >= 40) return 'Moderate';
+function riskLabel(score) {
+  if (score >= 75) return 'Critical';
+  if (score >= 50) return 'High';
+  if (score >= 25) return 'Moderate';
   return 'Low';
 }
 
-function getRecommendation(level) {
-  if (level === 'High') {
-    return 'Monitor departure status closely. Consider backup options if travel is time-sensitive.';
-  }
-  if (level === 'Moderate') {
-    return 'Monitor airport conditions before departure and leave extra buffer time.';
-  }
-  return 'No major airport-level risk signals are visible right now. Continue normal travel monitoring.';
-}
-
-function buildAssessment({ origin, destination, routes, routeDegree }) {
-  if (!origin || !destination) return null;
-
-  const directRoute = routes.some(route => (
-    (route.origin === origin.iata && route.destination === destination.iata)
-    || (route.origin === destination.iata && route.destination === origin.iata)
-  ));
-  const originConnectivity = getAirportConnectivity(origin, routeDegree);
-  const destinationConnectivity = getAirportConnectivity(destination, routeDegree);
-  const averageConnectivity = (originConnectivity + destinationConnectivity) / 2;
-  const originSeverity = severityWeights[origin.severity] || severityWeights.green;
-  const destinationSeverity = severityWeights[destination.severity] || severityWeights.green;
-
-  let score = 10 + originSeverity.origin + destinationSeverity.destination;
-  score += Math.min(25, (origin.hubImpactScore || 0) * 0.25);
-  score += Math.min(15, (destination.hubImpactScore || 0) * 0.18);
-  score += averageConnectivity >= 10 ? 12 : averageConnectivity >= 6 ? 8 : averageConnectivity >= 3 ? 4 : 0;
-  score += directRoute ? 8 : 14;
-  score += origin.isHub ? 4 : 0;
-  score += destination.isHub ? 4 : 0;
-
-  const riskScore = Math.round(clamp(score, 0, 100));
-  const riskLevel = getRiskLevel(riskScore);
-  const contributingFactors = [];
-
-  if (origin.isDisrupted) contributingFactors.push('FAA operational disruption at origin airport');
-  if (destination.isDisrupted) contributingFactors.push('FAA operational disruption at destination airport');
-  if ((origin.hubImpactScore || 0) >= 45 || (destination.hubImpactScore || 0) >= 45) {
-    contributingFactors.push('Elevated Hub Impact Score');
-  }
-  if (averageConnectivity >= 6) contributingFactors.push('High network connectivity exposure');
-  if (directRoute) contributingFactors.push('Static route network shows direct route exposure');
-  if (!directRoute) contributingFactors.push('No direct static route found; connection complexity may increase exposure');
-  if (origin.isHub || destination.isHub) contributingFactors.push('Major hub airport involved in itinerary');
-  if (!contributingFactors.length) {
-    contributingFactors.push('No major disruption factors detected in current airport-level data');
-  }
-
+function fallbackFlightRoute(flightNumber, routes) {
+  const normalized = flightNumber.trim().toUpperCase().replace(/\s+/g, '');
+  if (sampleFlights[normalized]) return { flightNumber: normalized, ...sampleFlights[normalized], provider: 'sample-route-inference' };
+  const usableRoutes = routes.filter(route => route.origin && route.destination);
+  const seed = normalized.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0);
+  const route = usableRoutes[seed % Math.max(usableRoutes.length, 1)] || { origin: 'ATL', destination: 'LAX' };
   return {
-    riskScore,
-    riskLevel,
-    directRoute,
-    originConnectivity,
-    destinationConnectivity,
-    contributingFactors,
-    recommendation: getRecommendation(riskLevel),
+    flightNumber: normalized || 'UNKNOWN',
+    airline: normalized.startsWith('DL') ? 'Delta Air Lines' : normalized.startsWith('AA') ? 'American Airlines' : normalized.startsWith('UA') ? 'United Airlines' : 'Unknown airline',
+    origin: route.origin,
+    destination: route.destination,
+    provider: 'sample-route-inference',
   };
 }
 
-export default function FlightRiskAnalyzer({ airports, routes, sourceMode, faaUpdatedAt }) {
-  const sortedAirports = useMemo(
-    () => [...airports].sort((a, b) => a.iata.localeCompare(b.iata)),
-    [airports],
-  );
-  const [airline, setAirline] = useState('');
-  const [originCode, setOriginCode] = useState('ATL');
-  const [destinationCode, setDestinationCode] = useState('LAX');
+function buildLocalAssessment(flightNumber, airports, routes) {
+  const flight = fallbackFlightRoute(flightNumber, routes);
+  const airportByCode = new Map(airports.map(airport => [airport.iata, airport]));
+  const origin = airportByCode.get(flight.origin);
+  const destination = airportByCode.get(flight.destination);
+  if (!origin || !destination) return null;
 
-  const airportByCode = useMemo(
-    () => new Map(sortedAirports.map(airport => [airport.iata, airport])),
-    [sortedAirports],
+  const routeExists = routes.some(route => (
+    (route.origin === origin.iata && route.destination === destination.iata)
+    || (route.origin === destination.iata && route.destination === origin.iata)
+  ));
+  const hubExposure = Math.max(origin.hubImpactScore || 0, destination.hubImpactScore || 0);
+  const delayEnvironment = Math.max(
+    origin.departureDelayMinutes || 0,
+    origin.arrivalDelayMinutes || 0,
+    destination.departureDelayMinutes || 0,
+    destination.arrivalDelayMinutes || 0,
   );
+  const cancellationEnvironment = Math.max(origin.cancellationRate || 0, destination.cancellationRate || 0);
+  const riskScore = Math.round(Math.min(100,
+    delayEnvironment * 0.45
+    + cancellationEnvironment * 220
+    + hubExposure * 0.35
+    + (routeExists ? 8 : 14)
+    + (origin.groundStop || destination.groundStop ? 25 : 0),
+  ));
+  const riskLevel = riskLabel(riskScore);
 
-  const routeDegree = useMemo(() => {
-    const degree = new Map();
-    for (const route of routes || []) {
-      degree.set(route.origin, (degree.get(route.origin) || 0) + 1);
-      degree.set(route.destination, (degree.get(route.destination) || 0) + 1);
+  return {
+    flightNumber: flight.flightNumber,
+    airline: flight.airline,
+    originAirport: origin,
+    destinationAirport: destination,
+    currentOriginDelay: origin.departureDelayMinutes || 0,
+    currentDestinationDelay: destination.arrivalDelayMinutes || 0,
+    cancellationEnvironment,
+    airportRisk: riskLabel(Math.max(origin.hubImpactScore || 0, destination.hubImpactScore || 0)),
+    hubExposure: Number(hubExposure.toFixed(1)),
+    estimatedDelayRisk: riskLevel,
+    riskScore,
+    riskLevel,
+    routeExposure: routeExists ? 'Direct route appears in static network' : 'Connection complexity estimated from static network',
+    timestamp: new Date().toISOString(),
+    disclaimer: 'This is an analytical estimate generated by the Hub Resilience Monitor and is not an official FAA prediction.',
+  };
+}
+
+async function fetchRisk(apiBaseUrl, flightNumber) {
+  if (!apiBaseUrl) throw new Error('Backend URL is not configured');
+  const response = await fetch(`${apiBaseUrl}/api/flight-risk/${encodeURIComponent(flightNumber)}`, {
+    headers: { Accept: 'application/json' },
+  });
+  const contentType = response.headers.get('content-type') || '';
+  if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+  if (!contentType.includes('application/json')) throw new Error('Backend did not return JSON');
+  return response.json();
+}
+
+function AirportRiskCard({ title, airport }) {
+  return (
+    <div>
+      <span>{title}</span>
+      <strong>{airport?.iata || '—'}</strong>
+      <small>{airport?.name}</small>
+      <small>Departure {airport?.departureDelayMinutes || 0} min · Arrival {airport?.arrivalDelayMinutes || 0} min</small>
+    </div>
+  );
+}
+
+export default function FlightRiskAnalyzer({ airports, routes, sourceMode, apiBaseUrl }) {
+  const [flightNumber, setFlightNumber] = useState('DL567');
+  const [assessment, setAssessment] = useState(() => buildLocalAssessment('DL567', airports, routes));
+  const [message, setMessage] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const sampleList = useMemo(() => Object.keys(sampleFlights), []);
+
+  useEffect(() => {
+    if (!assessment && airports.length) {
+      setAssessment(buildLocalAssessment(flightNumber, airports, routes));
     }
-    return degree;
-  }, [routes]);
+  }, [airports, routes, assessment, flightNumber]);
 
-  const origin = airportByCode.get(originCode) || sortedAirports[0] || null;
-  const destination = airportByCode.get(destinationCode) || sortedAirports[1] || origin;
-  const assessment = buildAssessment({ origin, destination, routes: routes || [], routeDegree });
-  const updateTime = faaUpdatedAt ? new Date(faaUpdatedAt).toLocaleString() : 'Not available';
-  const sourceLabel = sourceMode === 'live' ? 'Live FAA airport status' : 'Sample airport status data';
+  async function analyzeFlight(event) {
+    event.preventDefault();
+    const normalized = flightNumber.trim().toUpperCase().replace(/\s+/g, '');
+    if (!normalized) return;
+    setIsLoading(true);
+    setMessage('');
+    try {
+      const liveAssessment = await fetchRisk(apiBaseUrl, normalized);
+      setAssessment(liveAssessment);
+      setMessage(sourceMode === 'live' ? 'Backend flight-risk endpoint connected.' : 'Backend connected, but source data may be sample mode.');
+    } catch (error) {
+      const localAssessment = buildLocalAssessment(normalized, airports, routes);
+      setAssessment(localAssessment);
+      setMessage(`Using local analytical fallback for ${normalized}: ${error.message}`);
+    } finally {
+      setIsLoading(false);
+    }
+  }
 
   return (
     <section className="flight-risk-page">
       <div className="card flight-risk-intro">
-        <span className="section-kicker">Flight-level analytics</span>
-        <h2>Flight Risk Analyzer</h2>
+        <span className="section-kicker">Operational flight-delay risk</span>
+        <h2>Flight Risk Checker</h2>
         <p>
-          Translate airport-level disruption signals into a route-level risk assessment using the current FAA
-          operational status feed, static route connectivity, and estimated hub impact metrics.
+          Enter a flight number to translate current airport delay conditions, cancellation environment, hub exposure,
+          and route-network complexity into an estimated risk class.
         </p>
         <p className="panel-footnote">
-          This is an analytical estimate generated by the Hub Resilience Monitor and is not an official FAA prediction.
+          This does not claim exact prediction certainty and is not an official FAA prediction.
         </p>
       </div>
 
       <div className="dashboard-grid flight-risk-grid">
-        <form className="card risk-form" aria-label="Flight risk inputs" onSubmit={event => event.preventDefault()}>
+        <form className="card risk-form" aria-label="Flight risk checker" onSubmit={analyzeFlight}>
           <div className="section-heading">
             <div>
-              <span className="section-kicker">Inputs</span>
-              <h2>Itinerary Signals</h2>
+              <span className="section-kicker">Flight input</span>
+              <h2>Check a Flight</h2>
             </div>
           </div>
           <label className="risk-field">
-            <span>Airline</span>
+            <span>Flight Number</span>
             <input
-              value={airline}
-              onChange={event => setAirline(event.target.value)}
-              placeholder="Example: Delta, United, American"
+              value={flightNumber}
+              onChange={event => setFlightNumber(event.target.value.toUpperCase())}
+              placeholder="DL567, AA102, UA2184"
             />
           </label>
-          <label className="risk-field">
-            <span>Origin Airport</span>
-            <select value={origin?.iata || ''} onChange={event => setOriginCode(event.target.value)}>
-              {sortedAirports.map(airport => (
-                <option key={airport.iata} value={airport.iata}>{formatAirportLabel(airport)}</option>
-              ))}
-            </select>
-          </label>
-          <label className="risk-field">
-            <span>Destination Airport</span>
-            <select value={destination?.iata || ''} onChange={event => setDestinationCode(event.target.value)}>
-              {sortedAirports.map(airport => (
-                <option key={airport.iata} value={airport.iata}>{formatAirportLabel(airport)}</option>
-              ))}
-            </select>
-          </label>
-          <div className="risk-source-note">
-            <span>{sourceLabel}</span>
-            <span>FAA update: {updateTime}</span>
-            <span>Static route network: local project data</span>
+          <button className="methodology-button risk-submit" type="submit" disabled={isLoading}>
+            {isLoading ? 'Analyzing...' : 'Analyze Risk'}
+          </button>
+          <div className="sample-flight-row">
+            {sampleList.map(sample => (
+              <button key={sample} type="button" onClick={() => setFlightNumber(sample)}>{sample}</button>
+            ))}
           </div>
+          {message && <p className="panel-footnote">{message}</p>}
         </form>
 
         <div className="card risk-output">
@@ -173,20 +176,16 @@ export default function FlightRiskAnalyzer({ airports, routes, sourceMode, faaUp
               <span className="section-kicker">Output</span>
               <h2>Flight Risk Assessment</h2>
             </div>
-            {airline && <span className="count-badge">{airline}</span>}
+            {assessment && <span className={`risk-level risk-${assessment.riskLevel.toLowerCase()}`}>{assessment.riskLevel}</span>}
           </div>
 
           {assessment ? (
             <>
               <div className="risk-summary-grid">
-                <div><span>Origin</span><strong>{origin.iata}</strong><small>{origin.name}</small></div>
-                <div><span>Destination</span><strong>{destination.iata}</strong><small>{destination.name}</small></div>
-                <div><span>Risk Score</span><strong>{assessment.riskScore} / 100</strong><small>Estimated analytical score</small></div>
-                <div>
-                  <span>Risk Level</span>
-                  <strong className={`risk-level risk-${assessment.riskLevel.toLowerCase()}`}>{assessment.riskLevel}</strong>
-                  <small>Not an actual delay prediction</small>
-                </div>
+                <div><span>Flight</span><strong>{assessment.flightNumber}</strong><small>{assessment.airline}</small></div>
+                <AirportRiskCard title="Origin Airport" airport={assessment.originAirport} />
+                <AirportRiskCard title="Destination Airport" airport={assessment.destinationAirport} />
+                <div><span>Estimated Delay Risk</span><strong>{assessment.riskScore} / 100</strong><small>{assessment.estimatedDelayRisk}</small></div>
               </div>
 
               <div className="risk-meter" aria-label={`Risk score ${assessment.riskScore} out of 100`}>
@@ -195,37 +194,31 @@ export default function FlightRiskAnalyzer({ airports, routes, sourceMode, faaUp
 
               <div className="risk-details-grid">
                 <div>
-                  <h3>Contributing Factors</h3>
+                  <h3>Risk Factors</h3>
                   <ul className="risk-factors">
-                    {assessment.contributingFactors.map(factor => <li key={factor}>{factor}</li>)}
+                    <li>Current Origin Delay: {assessment.currentOriginDelay || 0} minutes</li>
+                    <li>Current Destination Delay: {assessment.currentDestinationDelay || 0} minutes</li>
+                    <li>Cancellation Environment: {((assessment.cancellationEnvironment || 0) * 100).toFixed(1)}%</li>
+                    <li>Airport Risk: {assessment.airportRisk}</li>
+                    <li>Hub Exposure: {assessment.hubExposure}</li>
+                    <li>{assessment.routeExposure}</li>
                   </ul>
                 </div>
                 <div className="risk-recommendation">
                   <h3>Recommendation</h3>
-                  <p>{assessment.recommendation}</p>
-                  <small>
-                    Route exposure: {assessment.directRoute ? `${origin.iata} to ${destination.iata} appears in static route data` : 'connection exposure estimated from network complexity'}
-                  </small>
+                  <p>
+                    {assessment.riskLevel === 'Critical' || assessment.riskLevel === 'High'
+                      ? 'Monitor airline departure status closely and consider backup options if travel is time-sensitive.'
+                      : assessment.riskLevel === 'Moderate'
+                        ? 'Keep monitoring airport conditions and leave extra buffer time.'
+                        : 'No major airport-level risk signals are visible right now. Continue normal travel monitoring.'}
+                  </p>
+                  <small>{assessment.disclaimer}</small>
                 </div>
               </div>
-
-              <details className="risk-explainer">
-                <summary>How is this score calculated?</summary>
-                <ul>
-                  <li>FAA operational status</li>
-                  <li>Hub Impact Score</li>
-                  <li>Network connectivity</li>
-                  <li>Route exposure</li>
-                  <li>Connection complexity</li>
-                </ul>
-                <p>
-                  The score combines airport-level operational advisories with static route-network exposure and
-                  estimated impact metrics. It does not predict actual flight delays.
-                </p>
-              </details>
             </>
           ) : (
-            <p className="no-data">Airport data is still loading.</p>
+            <p className="no-data">Enter a flight number to calculate risk.</p>
           )}
         </div>
       </div>

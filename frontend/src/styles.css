@@ -251,7 +251,7 @@ button { font: inherit; }
 
 .control-bar {
   display: grid;
-  grid-template-columns: minmax(360px, 1fr) auto;
+  grid-template-columns: minmax(360px, 1fr);
   gap: 14px;
   align-items: start;
   margin-bottom: 16px;
@@ -346,6 +346,7 @@ button { font: inherit; }
 
 .dashboard-grid { display: grid; gap: 16px; margin-bottom: 16px; }
 .primary-grid { grid-template-columns: minmax(0, 1.9fr) minmax(330px, 0.8fr); }
+.live-dashboard-grid { grid-template-columns: minmax(640px, 2fr) minmax(360px, 0.85fr); align-items: start; }
 .secondary-grid { grid-template-columns: minmax(280px, 0.8fr) minmax(440px, 1.25fr) minmax(300px, 0.9fr); }
 .insight-grid { grid-template-columns: minmax(0, 1fr) minmax(320px, 0.8fr); }
 .detail-page-grid { grid-template-columns: minmax(320px, 0.8fr) minmax(360px, 1.1fr); align-items: start; }
@@ -366,7 +367,7 @@ button { font: inherit; }
   box-shadow: 0 16px 38px rgba(0, 0, 0, 0.16);
 }
 
-.map-card { height: 540px; padding: 0; overflow: hidden; }
+.map-card { height: min(72vh, 760px); min-height: 620px; padding: 0; overflow: hidden; }
 .network-card { min-height: 410px; }
 .compact-card { min-height: 260px; }
 
@@ -689,6 +690,39 @@ h2 { margin: 5px 0 0; font-size: 1.02rem; letter-spacing: -0.02em; }
   font-family: "IBM Plex Mono", monospace;
 }
 
+.risk-submit {
+  width: 100%;
+  margin-top: 16px;
+}
+
+.risk-submit:disabled {
+  cursor: progress;
+  opacity: 0.65;
+}
+
+.sample-flight-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.sample-flight-row button {
+  padding: 7px 10px;
+  border: 1px solid #26374a;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.03);
+  color: #a9bdd5;
+  cursor: pointer;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.7rem;
+}
+
+.sample-flight-row button:hover {
+  border-color: #4da3ff;
+  color: #e5f1ff;
+}
+
 .risk-summary-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -728,6 +762,7 @@ h2 { margin: 5px 0 0; font-size: 1.02rem; letter-spacing: -0.02em; }
 .risk-low { color: #45d483 !important; }
 .risk-moderate { color: #f6d365 !important; }
 .risk-high { color: #ff5d73 !important; }
+.risk-critical { color: #ff5d73 !important; box-shadow: 0 0 0 3px rgba(255, 93, 115, 0.1); }
 
 .risk-meter {
   height: 12px;
@@ -1001,7 +1036,7 @@ h2 { margin: 5px 0 0; font-size: 1.02rem; letter-spacing: -0.02em; }
     padding: 16px;
   }
 
-  .primary-grid, .secondary-grid, .insight-grid, .detail-page-grid, .network-page-grid, .methodology-page-grid, .flight-risk-grid { grid-template-columns: 1fr; }
+  .primary-grid, .live-dashboard-grid, .secondary-grid, .insight-grid, .detail-page-grid, .network-page-grid, .methodology-page-grid, .flight-risk-grid { grid-template-columns: 1fr; }
   .secondary-grid { grid-template-columns: repeat(2, 1fr); }
   .network-card { grid-column: 1 / -1; }
 }
@@ -1012,7 +1047,7 @@ h2 { margin: 5px 0 0; font-size: 1.02rem; letter-spacing: -0.02em; }
   .source-panel { min-width: 0; text-align: left; }
   .source-badge { justify-self: start; }
   .control-bar, .metric-strip, .secondary-grid { grid-template-columns: 1fr; }
-  .map-card { height: 460px; }
+  .map-card { height: 520px; min-height: 520px; }
   .map-overlay { align-items: flex-start; flex-direction: column; }
   .app-footer { flex-direction: column; }
   .methodology-grid, .hub-summary-grid { grid-template-columns: 1fr; }
@@ -1024,6 +1059,6 @@ h2 { margin: 5px 0 0; font-size: 1.02rem; letter-spacing: -0.02em; }
 @media (max-width: 500px) {
   .metric-strip, .secondary-grid { grid-template-columns: 1fr; }
   .provenance-row { flex-direction: column; gap: 8px; }
-  .map-card { height: 420px; }
+  .map-card { height: 430px; min-height: 430px; }
   .search-results button { width: 100%; justify-content: flex-start; }
 }

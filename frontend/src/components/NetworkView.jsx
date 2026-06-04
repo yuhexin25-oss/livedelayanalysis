@@ -32,7 +32,7 @@ export default function NetworkView({ hubs, airports, selectedAirport, onSelect 
       <div className="section-heading">
         <div>
           <span className="section-kicker">Static route connections</span>
-          <h2>Delay Propagation Network</h2>
+          <h2>Hub Network Analysis</h2>
         </div>
         {graph.hub && <span className="count-badge">{graph.hub.iata} focus</span>}
       </div>
@@ -47,7 +47,7 @@ export default function NetworkView({ hubs, airports, selectedAirport, onSelect 
             <g onClick={() => onSelect(graph.hub)} className="network-node">
               <circle cx={graph.hub.x} cy={graph.hub.y} r="34" fill={colors[graph.hub.severity]} className="hub-ring" />
               <text x={graph.hub.x} y={graph.hub.y + 5} textAnchor="middle" className="node-code dark-code">{graph.hub.iata}</text>
-              <text x={graph.hub.x} y={graph.hub.y + 56} textAnchor="middle" className="node-caption">{graph.hub.disruptionType}</text>
+              <text x={graph.hub.x} y={graph.hub.y + 56} textAnchor="middle" className="node-caption">{graph.hub.hubImpactClassification || graph.hub.operationalStatus}</text>
             </g>
             {graph.nodes.map(node => (
               <g key={node.iata} onClick={() => onSelect(node)} className="network-node">
@@ -61,7 +61,7 @@ export default function NetworkView({ hubs, airports, selectedAirport, onSelect 
           </p>
           <p className="panel-footnote">
             Estimated propagation network based on static route connectivity. Links show potential downstream exposure,
-            not confirmed flight delays.
+            not confirmed flight delays or exact predictions.
           </p>
         </>
       )}

@@ -28,7 +28,7 @@ export default function MapView({ airports, selectedAirport, sourceMode, onSelec
       <div className="map-overlay">
         <div>
           <span className="section-kicker">Operational map</span>
-          <strong>{sourceMode === 'live' ? 'Live Airport Delay Status' : 'Sample Airport Delay Status'}</strong>
+          <strong>{sourceMode === 'live' ? 'Live Airport Operational Risk' : 'Sample Airport Operational Risk'}</strong>
         </div>
         <div className="legend">
           <span><i className="legend-swatch swatch-green" />Normal</span>
@@ -57,12 +57,13 @@ export default function MapView({ airports, selectedAirport, sourceMode, onSelec
             eventHandlers={{ click: () => onSelect(airport) }}
           >
             <Tooltip direction="top" offset={[0, -10]} opacity={1} className="airport-tooltip" sticky>
-              {airport.iata} · {airport.disruptionType}
+              {airport.iata} · {airport.name} · {airport.operationalStatus || airport.disruptionType}
             </Tooltip>
             <Popup>
               <strong>{airport.iata} · {airport.name}</strong><br />
-              {airport.disruptionType}<br />
-              {airport.delayMinutes ? `${airport.delayMinutes} min reported delay` : 'No reported delay minutes'}
+              {airport.operationalStatus || airport.disruptionType}<br />
+              Departure: {airport.departureDelayMinutes || 0} min · Arrival: {airport.arrivalDelayMinutes || 0} min<br />
+              FAA advisory: {airport.faaStatus || airport.status || 'No active advisory'}
             </Popup>
           </CircleMarker>
         ))}

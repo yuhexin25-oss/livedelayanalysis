@@ -8,9 +8,15 @@ function normalStatus(code) {
     status: 'No active sample status advisory',
     disruptionType: 'Normal',
     delayMinutes: 0,
+    departureDelayMinutes: 0,
+    arrivalDelayMinutes: 0,
+    cancellationRate: 0.01,
+    delayedFlights: 0,
+    totalFlights: 220,
     delayRange: null,
     groundStop: false,
     groundDelayProgram: false,
+    faaClosureAdvisory: false,
     closure: false,
     weatherDelay: false,
     trend: '',
@@ -21,7 +27,6 @@ function normalStatus(code) {
 
 function inferDisruptionType(status) {
   if (status.disruptionType) return status.disruptionType;
-  if (status.closure) return 'Closure';
   if (status.groundStop) return 'Ground Stop';
   if (status.groundDelayProgram) return 'Ground Delay Program';
   if (status.weatherDelay) return 'Weather Delay';
@@ -30,10 +35,25 @@ function inferDisruptionType(status) {
 }
 
 function classifySeverity(status) {
-  if (status.closure || status.groundStop) return 'red';
-  if (status.groundDelayProgram || status.delayMinutes >= 60) return 'orange';
-  if (status.delayMinutes > 0 || status.weatherDelay || status.disruptionType !== 'Normal') return 'yellow';
+  const delay = Math.max(status.departureDelayMinutes || status.delayMinutes || 0, status.arrivalDelayMinutes || 0);
+  if (status.groundStop || delay > 60 || (status.cancellationRate || 0) > 0.1) return 'red';
+  if (delay >= 30) return 'orange';
+  if (delay >= 15) return 'yellow';
   return 'green';
+}
+
+function classifyImpact(score) {
+  if (score >= 75) return 'Critical';
+  if (score >= 50) return 'High';
+  if (score >= 25) return 'Moderate';
+  return 'Low';
+}
+
+function operationalStatusFromSeverity(severity) {
+  if (severity === 'red') return 'Severe operational delay risk';
+  if (severity === 'orange') return 'Moderate operational delay risk';
+  if (severity === 'yellow') return 'Minor operational delay risk';
+  return 'Normal operations';
 }
 
 function buildNetwork(routes) {
@@ -59,12 +79,28 @@ export function buildFallbackDashboardData({ airports, routes, statuses }) {
 
   const allAirports = airports.map(airport => {
     const status = statusMap.get(airport.iata) || normalStatus(airport.iata);
+    const departureDelayMinutes = status.departureDelayMinutes ?? status.delayMinutes ?? 0;
+    const arrivalDelayMinutes = status.arrivalDelayMinutes ?? Math.round((status.delayMinutes || 0) * 0.7);
+    const enrichedStatus = {
+      ...status,
+      departureDelayMinutes,
+      arrivalDelayMinutes,
+      cancellationRate: status.cancellationRate ?? (status.groundStop ? 0.12 : status.groundDelayProgram ? 0.04 : 0.01),
+      delayMinutes: Math.max(departureDelayMinutes, arrivalDelayMinutes),
+    };
+    const severity = classifySeverity(enrichedStatus);
     return {
       ...airport,
-      ...status,
-      severity: classifySeverity(status),
+      ...enrichedStatus,
+      faaStatus: status.status,
+      rawFaaAdvisory: status.status,
+      operationalStatus: operationalStatusFromSeverity(severity),
+      disruptionType: operationalStatusFromSeverity(severity),
+      averageDelayMinutes: Math.round((departureDelayMinutes + arrivalDelayMinutes) / 2),
+      provider: 'sample-operational-metrics',
+      severity,
       isHub: HUB_CODES.includes(airport.iata),
-      isDisrupted: status.disruptionType !== 'Normal',
+      isDisrupted: severity !== 'green',
     };
   });
 
@@ -76,18 +112,24 @@ export function buildFallbackDashboardData({ airports, routes, statuses }) {
       .map(connectedCode => airportByCode.get(connectedCode) || { iata: connectedCode, name: connectedCode });
     const affectedAirportsCount = airport.isDisrupted ? connectedAirports.length : 0;
     const hubConnectivityScore = connectedAirports.length;
-    const averageDelayMinutes = airport.delayMinutes;
-    const hubImpactScore = airport.isDisrupted
-      ? Number((averageDelayMinutes * 0.5 + affectedAirportsCount * 2 + hubConnectivityScore * 0.3).toFixed(1))
-      : 0;
+    const groundStopBonus = airport.groundStop ? 35 : 0;
+    const hubImpactScore = Number((
+      (airport.departureDelayMinutes || 0) * 0.4
+      + (airport.arrivalDelayMinutes || 0) * 0.2
+      + (airport.cancellationRate || 0) * 200
+      + hubConnectivityScore * 0.8
+      + groundStopBonus
+    ).toFixed(1));
 
     return {
       ...airport,
       connectedAirports,
       affectedAirportsCount,
-      averageDelayMinutes,
+      averageDelayMinutes: airport.averageDelayMinutes,
       hubConnectivityScore,
       hubImpactScore,
+      hubImpactClassification: classifyImpact(hubImpactScore),
+      groundStopBonus,
     };
   });
 
@@ -96,7 +138,9 @@ export function buildFallbackDashboardData({ airports, routes, statuses }) {
     sourceLabel: 'Sample Data Mode',
     faaUpdatedAt: null,
     fetchedAt: new Date().toISOString(),
-    notice: 'Using sample fallback data — backend not connected',
+    notice: 'Using sample fallback operational metrics — backend not connected',
+    methodology: 'Estimated Hub Impact Score = departure delay × 0.4 + arrival delay × 0.2 + cancellation rate × 200 + connected airports × 0.8 + ground stop bonus.',
+    providerMode: 'sample-operational-metrics',
     hubs,
     allAirports,
     routes,

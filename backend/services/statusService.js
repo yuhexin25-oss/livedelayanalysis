@@ -2,6 +2,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { parseStringPromise } from 'xml2js';
+import { createFlightDataProvider } from './flightDataProvider.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -15,11 +16,11 @@ export const FETCH_INTERVAL_MS = 5 * 60 * 1000;
 
 let latestStatus = {
   sourceMode: 'initializing',
-  sourceLabel: 'Waiting for FAA airport status',
+  sourceLabel: 'Waiting for airport operational data',
   faaUpdatedAt: null,
   fetchedAt: null,
   refreshIntervalMinutes: 5,
-  notice: 'FAA data shows airport-level operational status, not every individual flight.',
+  notice: 'Operational delay risk is estimated; FAA advisories are supplemental context.',
   hubs: [],
   allAirports: [],
   routes: [],
@@ -57,7 +58,7 @@ function categoryKind(name) {
   const lower = name.toLowerCase();
   if (lower.includes('ground stop')) return 'Ground Stop';
   if (lower.includes('ground delay')) return 'Ground Delay Program';
-  if (lower.includes('closure')) return 'Closure';
+  if (lower.includes('closure')) return 'FAA Closure Advisory';
   if (lower.includes('deicing')) return 'Weather Delay';
   return 'Delay';
 }
@@ -80,7 +81,8 @@ function normalizeEntry(entry, kind) {
     delayRange: min || max ? { min, max: max || min } : null,
     groundStop: disruptionType === 'Ground Stop',
     groundDelayProgram: disruptionType === 'Ground Delay Program',
-    closure: disruptionType === 'Closure',
+    faaClosureAdvisory: disruptionType === 'FAA Closure Advisory',
+    closure: false,
     weatherDelay: weatherDelay || kind === 'Weather Delay',
     trend: text(arrivalDeparture?.Trend || entry?.Trend),
     start: text(entry?.Start),
@@ -90,7 +92,7 @@ function normalizeEntry(entry, kind) {
 
 function mergeStatus(existing, incoming) {
   if (!existing) return incoming;
-  const priority = { Closure: 5, 'Ground Stop': 4, 'Ground Delay Program': 3, 'Weather Delay': 2, Delay: 1 };
+  const priority = { 'Ground Stop': 5, 'Ground Delay Program': 4, 'Weather Delay': 3, Delay: 2, 'FAA Closure Advisory': 1 };
   const primary = (priority[incoming.disruptionType] || 0) > (priority[existing.disruptionType] || 0)
     ? incoming
     : existing;
@@ -101,7 +103,8 @@ function mergeStatus(existing, incoming) {
     delayRange: primary.delayRange || existing.delayRange || incoming.delayRange,
     groundStop: existing.groundStop || incoming.groundStop,
     groundDelayProgram: existing.groundDelayProgram || incoming.groundDelayProgram,
-    closure: existing.closure || incoming.closure,
+    faaClosureAdvisory: existing.faaClosureAdvisory || incoming.faaClosureAdvisory,
+    closure: false,
     weatherDelay: existing.weatherDelay || incoming.weatherDelay,
     status: [existing.status, incoming.status].filter(Boolean).join(' | '),
   };
@@ -127,12 +130,27 @@ export async function parseFaaStatusXml(xmlText) {
   };
 }
 
-function classifySeverity(status) {
-  if (!status) return 'green';
-  if (status.closure || status.groundStop) return 'red';
-  if (status.groundDelayProgram || status.delayMinutes >= 60) return 'orange';
-  if (status.delayMinutes > 0 || status.weatherDelay || status.disruptionType !== 'Normal') return 'yellow';
+function classifySeverity(metrics) {
+  if (!metrics) return 'green';
+  const delay = Math.max(metrics.departureDelayMinutes || 0, metrics.arrivalDelayMinutes || 0);
+  if (metrics.groundStop || delay > 60 || (metrics.cancellationRate || 0) > 0.1) return 'red';
+  if (delay >= 30) return 'orange';
+  if (delay >= 15) return 'yellow';
   return 'green';
+}
+
+function classifyImpact(score) {
+  if (score >= 75) return 'Critical';
+  if (score >= 50) return 'High';
+  if (score >= 25) return 'Moderate';
+  return 'Low';
+}
+
+function operationalStatusFromSeverity(severity) {
+  if (severity === 'red') return 'Severe operational delay risk';
+  if (severity === 'orange') return 'Moderate operational delay risk';
+  if (severity === 'yellow') return 'Minor operational delay risk';
+  return 'Normal operations';
 }
 
 function buildNetwork(routes) {
@@ -156,6 +174,7 @@ function normalStatus(code) {
     delayRange: null,
     groundStop: false,
     groundDelayProgram: false,
+    faaClosureAdvisory: false,
     closure: false,
     weatherDelay: false,
     trend: '',
@@ -166,7 +185,6 @@ function normalStatus(code) {
 
 function inferDisruptionType(status) {
   if (status.disruptionType) return status.disruptionType;
-  if (status.closure) return 'Closure';
   if (status.groundStop) return 'Ground Stop';
   if (status.groundDelayProgram) return 'Ground Delay Program';
   if (status.weatherDelay) return 'Weather Delay';
@@ -174,24 +192,40 @@ function inferDisruptionType(status) {
   return 'Normal';
 }
 
-export function buildDashboardData({ airports, routes, statuses, sourceMode, sourceLabel, faaUpdatedAt, fetchedAt }) {
+export async function buildDashboardData({ airports, routes, statuses, sourceMode, sourceLabel, faaUpdatedAt, fetchedAt }) {
   const normalizedStatuses = statuses.map(item => ({
     ...normalStatus(item.airportCode),
     ...item,
     disruptionType: inferDisruptionType(item),
   }));
-  const statusMap = new Map(normalizedStatuses.map(item => [item.airportCode, item]));
   const network = buildNetwork(routes);
   const airportByCode = new Map(airports.map(airport => [airport.iata, airport]));
+  const flightDataProvider = createFlightDataProvider({ airports, routes, faaStatuses: normalizedStatuses });
+  const metricsEntries = await Promise.all(airports.map(async airport => [
+    airport.iata,
+    await flightDataProvider.getAirportDelayMetrics(airport.iata),
+  ]));
+  const metricsMap = new Map(metricsEntries);
 
   const allAirports = airports.map(airport => {
-    const status = statusMap.get(airport.iata) || normalStatus(airport.iata);
+    const faaStatus = normalizedStatuses.find(status => status.airportCode === airport.iata) || normalStatus(airport.iata);
+    const metrics = metricsMap.get(airport.iata);
+    const severity = classifySeverity(metrics);
+    const operationalStatus = operationalStatusFromSeverity(severity);
+    const delayMinutes = Math.max(metrics.departureDelayMinutes || 0, metrics.arrivalDelayMinutes || 0);
     return {
       ...airport,
-      ...status,
-      severity: classifySeverity(status),
+      ...faaStatus,
+      ...metrics,
+      faaStatus: faaStatus.status,
+      rawFaaAdvisory: faaStatus.status,
+      operationalStatus,
+      disruptionType: operationalStatus,
+      delayMinutes,
+      averageDelayMinutes: Math.round(((metrics.departureDelayMinutes || 0) + (metrics.arrivalDelayMinutes || 0)) / 2),
+      severity,
       isHub: HUB_CODES.includes(airport.iata),
-      isDisrupted: status.disruptionType !== 'Normal',
+      isDisrupted: severity !== 'green',
     };
   });
 
@@ -205,21 +239,27 @@ export function buildDashboardData({ airports, routes, statuses, sourceMode, sou
     });
     const affectedAirportsCount = airport.isDisrupted ? connectedAirports.length : 0;
     const hubConnectivityScore = connectedAirports.length;
-    const averageDelayMinutes = airport.delayMinutes;
-    const hubImpactScore = airport.isDisrupted
-      ? Number((averageDelayMinutes * 0.5 + affectedAirportsCount * 2 + hubConnectivityScore * 0.3).toFixed(1))
-      : 0;
+    const groundStopBonus = airport.groundStop ? 35 : 0;
+    const hubImpactScore = Number((
+      (airport.departureDelayMinutes || 0) * 0.4
+      + (airport.arrivalDelayMinutes || 0) * 0.2
+      + (airport.cancellationRate || 0) * 200
+      + hubConnectivityScore * 0.8
+      + groundStopBonus
+    ).toFixed(1));
 
     return {
       ...airport,
       connectedAirports,
       affectedAirportsCount,
-      averageDelayMinutes,
+      averageDelayMinutes: airport.averageDelayMinutes || 0,
       hubConnectivityScore,
       hubImpactScore,
+      hubImpactClassification: classifyImpact(hubImpactScore),
+      groundStopBonus,
       affected_airports_count: affectedAirportsCount,
       disruption_type: airport.disruptionType,
-      average_delay_minutes: averageDelayMinutes,
+      average_delay_minutes: airport.averageDelayMinutes || 0,
       hub_connectivity_score: hubConnectivityScore,
       hub_impact_score: hubImpactScore,
     };
@@ -231,8 +271,9 @@ export function buildDashboardData({ airports, routes, statuses, sourceMode, sou
     faaUpdatedAt,
     fetchedAt,
     refreshIntervalMinutes: 5,
-    notice: 'FAA data shows airport-level operational status, not every individual flight.',
-    methodology: 'Estimated Hub Impact Score = delay minutes × 0.5 + affected airports × 2 + connectivity score × 0.3.',
+    notice: 'Operational delay risk is estimated from flight-delay metrics; FAA advisories are supplemental context, not NOTAM-based closure predictions.',
+    methodology: 'Estimated Hub Impact Score = departure delay × 0.4 + arrival delay × 0.2 + cancellation rate × 200 + connected airports × 0.8 + ground stop bonus.',
+    providerMode: allAirports.some(airport => airport.provider === 'flightaware-aeroapi') ? 'flightaware-aeroapi' : 'estimated-operational-metrics',
     hubs,
     allAirports,
     routes,
@@ -250,24 +291,24 @@ export async function refreshLiveStatus() {
     });
     if (!response.ok) throw new Error(`FAA API returned ${response.status}`);
     const parsed = await parseFaaStatusXml(await response.text());
-    latestStatus = buildDashboardData({
+    latestStatus = await buildDashboardData({
       airports,
       routes,
       statuses: parsed.statuses,
       sourceMode: 'live',
-      sourceLabel: 'Live FAA airport status',
+      sourceLabel: 'Live airport operational risk data',
       faaUpdatedAt: parsed.faaUpdatedAt,
       fetchedAt,
     });
     console.log(`[status] Loaded ${parsed.statuses.length} live FAA airport advisories`);
   } catch (error) {
     const fallback = await readJson('fallback_status.json');
-    latestStatus = buildDashboardData({
+    latestStatus = await buildDashboardData({
       airports,
       routes,
       statuses: fallback,
       sourceMode: 'fallback',
-      sourceLabel: 'Sample fallback status data (not live)',
+      sourceLabel: 'Sample fallback operational metrics (not live)',
       faaUpdatedAt: null,
       fetchedAt,
     });
@@ -279,6 +320,95 @@ export async function refreshLiveStatus() {
 
 export function getLatestStatus() {
   return latestStatus;
+}
+
+function riskLevelFromScore(score) {
+  if (score >= 75) return 'Critical';
+  if (score >= 50) return 'High';
+  if (score >= 25) return 'Moderate';
+  return 'Low';
+}
+
+function airportByIata(iata) {
+  return latestStatus.allAirports.find(airport => airport.iata === iata) || null;
+}
+
+export async function getFlightRiskAssessment(flightNumber) {
+  const airports = await readJson('airports.json');
+  const routes = await readJson('routes.json');
+  const provider = createFlightDataProvider({
+    airports,
+    routes,
+    faaStatuses: latestStatus.allAirports.map(airport => ({
+      airportCode: airport.iata,
+      status: airport.rawFaaAdvisory || airport.faaStatus,
+      disruptionType: airport.faaDisruptionType || airport.disruptionType,
+      delayMinutes: airport.delayMinutes || 0,
+      groundStop: airport.groundStop,
+      groundDelayProgram: airport.groundDelayProgram,
+      weatherDelay: airport.weatherDelay,
+    })),
+  });
+  const flight = await provider.getFlightStatus(flightNumber);
+  const origin = airportByIata(flight.origin);
+  const destination = airportByIata(flight.destination);
+  if (!origin || !destination) {
+    throw new Error(`Unable to resolve operational airports for ${flight.flightNumber}`);
+  }
+
+  const routeExists = routes.some(route => (
+    (route.origin === origin.iata && route.destination === destination.iata)
+    || (route.origin === destination.iata && route.destination === origin.iata)
+  ));
+  const hubExposure = Math.max(origin.hubImpactScore || 0, destination.hubImpactScore || 0);
+  const delayEnvironment = Math.max(
+    origin.departureDelayMinutes || 0,
+    origin.arrivalDelayMinutes || 0,
+    destination.departureDelayMinutes || 0,
+    destination.arrivalDelayMinutes || 0,
+  );
+  const cancellationEnvironment = Math.max(origin.cancellationRate || 0, destination.cancellationRate || 0);
+  const routeExposure = routeExists ? 8 : 14;
+  const score = Math.round(Math.min(100,
+    delayEnvironment * 0.45
+    + cancellationEnvironment * 220
+    + hubExposure * 0.35
+    + routeExposure
+    + (origin.groundStop || destination.groundStop ? 25 : 0),
+  ));
+  const riskLevel = riskLevelFromScore(score);
+
+  return {
+    flightNumber: flight.flightNumber,
+    airline: flight.airline,
+    originAirport: {
+      iata: origin.iata,
+      name: origin.name,
+      departureDelayMinutes: origin.departureDelayMinutes,
+      arrivalDelayMinutes: origin.arrivalDelayMinutes,
+      severity: origin.severity,
+      hubImpactScore: origin.hubImpactScore || 0,
+    },
+    destinationAirport: {
+      iata: destination.iata,
+      name: destination.name,
+      departureDelayMinutes: destination.departureDelayMinutes,
+      arrivalDelayMinutes: destination.arrivalDelayMinutes,
+      severity: destination.severity,
+      hubImpactScore: destination.hubImpactScore || 0,
+    },
+    currentOriginDelay: origin.departureDelayMinutes || 0,
+    currentDestinationDelay: destination.arrivalDelayMinutes || 0,
+    cancellationEnvironment,
+    airportRisk: riskLevelFromScore(Math.max(origin.hubImpactScore || 0, destination.hubImpactScore || 0)),
+    hubExposure: Number(hubExposure.toFixed(1)),
+    estimatedDelayRisk: riskLevel,
+    riskScore: score,
+    riskLevel,
+    routeExposure: routeExists ? 'Direct route appears in static network' : 'Connection complexity estimated from static network',
+    timestamp: new Date().toISOString(),
+    disclaimer: 'This is an analytical estimate generated by the Hub Resilience Monitor and is not an official FAA prediction.',
+  };
 }
 
 export async function startStatusRefresh() {

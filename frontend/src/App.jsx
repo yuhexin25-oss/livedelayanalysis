@@ -14,16 +14,28 @@ import { buildFallbackDashboardData } from './utils/dashboardData.js';
 const refreshIntervalMs = 60 * 1000;
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/+$/, '');
 const FALLBACK_DATA_BASE_URL = `${import.meta.env.BASE_URL}data`;
+const BASE_PATH = import.meta.env.BASE_URL.replace(/\/$/, '');
 
 const navigationItems = [
-  { id: 'welcome', label: 'Welcome' },
-  { id: 'dashboard', label: 'Live Dashboard' },
-  { id: 'detail', label: 'Airport Detail' },
-  { id: 'network', label: 'Propagation Network' },
-  { id: 'flight-risk', label: 'Flight Risk Analyzer' },
-  { id: 'methodology', label: 'Methodology' },
-  { id: 'about', label: 'About Project' },
+  { id: 'welcome', label: 'Home' },
+  { id: 'dashboard', label: 'Live Airport Dashboard' },
+  { id: 'flight-risk', label: 'Flight Risk Checker' },
+  { id: 'network', label: 'Hub Network Analysis' },
+  { id: 'about', label: 'About' },
 ];
+
+const viewPaths = {
+  welcome: '',
+  dashboard: 'dashboard',
+  'flight-risk': 'flight-risk',
+  network: 'network',
+  about: 'about',
+};
+
+function viewFromLocation() {
+  const path = window.location.pathname.replace(BASE_PATH, '').replace(/^\/+|\/+$/g, '');
+  return Object.entries(viewPaths).find(([, value]) => value === path)?.[0] || 'welcome';
+}
 
 function hasValidApiBaseUrl() {
   try {
@@ -66,7 +78,8 @@ function SourcePanel({ data }) {
         <span className="pulse-dot" />
         {data ? (data.sourceMode === 'live' ? 'Live FAA Backend Connected' : 'Sample Data Mode') : 'Loading dashboard data'}
       </span>
-      <span>FAA update: {formatTime(data?.faaUpdatedAt)}</span>
+      <span>FAA advisory update: {formatTime(data?.faaUpdatedAt)}</span>
+      <span>Operational provider: {data?.providerMode || 'Not available'}</span>
       <span>Dashboard fetch: {formatTime(data?.fetchedAt)}</span>
     </div>
   );
@@ -76,8 +89,8 @@ function Navigation({ activeView, setActiveView }) {
   return (
     <nav className="app-nav" aria-label="Dashboard sections">
       <div className="nav-brand">
-        <span className="section-kicker">Hub Resilience</span>
-        <strong>Monitor</strong>
+        <span className="section-kicker">Airport Risk</span>
+        <strong>Platform</strong>
       </div>
       <div className="nav-items">
         {navigationItems.map(item => (
@@ -103,35 +116,35 @@ function MethodologyContent({ refreshIntervalMinutes, onOpenModal }) {
       </div>
       <div className="methodology-page-grid">
         <section className="card">
-          <span className="section-kicker">Data sources</span>
-          <h2>Live FAA Airport Status</h2>
+          <span className="section-kicker">Primary architecture</span>
+          <h2>Operational Flight-Delay Metrics</h2>
           <p className="page-copy">
-            The backend fetches FAA airport operational advisories and normalizes delay, closure, ground stop,
-            ground delay program, and weather status signals into dashboard JSON.
+            The scoring layer is built around normalized departure delay, arrival delay, cancellation environment,
+            delayed flights, and total flight volume. FlightAware AeroAPI can be plugged in with credentials.
           </p>
         </section>
         <section className="card">
-          <span className="section-kicker">Static network</span>
-          <h2>Route Connectivity</h2>
+          <span className="section-kicker">Supplemental source</span>
+          <h2>FAA Operational Advisories</h2>
           <p className="page-copy">
-            Static local route data models connected airports. It is not live FAA data and is used only for network
-            exposure and propagation estimates.
+            FAA NAS Status, ground stops, and ground delay programs are displayed as context. Raw FAA text is not used
+            as the primary airport-closure signal.
           </p>
         </section>
         <section className="card">
           <span className="section-kicker">Estimated metric</span>
           <h2>Hub Impact Score</h2>
           <p className="formula page-formula">
-            Hub Impact Score = Delay Minutes × 0.5 + Affected Airports × 2 + Connectivity × 0.3
+            Hub Impact Score = Departure Delay × 0.4 + Arrival Delay × 0.2 + Cancellation Rate × 200 + Connectivity × 0.8 + Ground Stop Bonus
           </p>
-          <p className="page-copy">This is an analytical score created for this project, not an official FAA metric.</p>
+          <p className="page-copy">Scores are classified as Low, Moderate, High, or Critical and are not official FAA metrics.</p>
         </section>
         <section className="card">
           <span className="section-kicker">Limitations</span>
           <h2>Airport-Level Awareness</h2>
           <p className="page-copy">
-            The dashboard updates every {refreshIntervalMinutes} minutes and is not an individual flight tracker.
-            Trend charts are estimated visualizations based on current severity, not stored historical FAA data.
+            The dashboard updates every {refreshIntervalMinutes} minutes and does not claim exact flight-delay
+            prediction certainty. Trend charts are estimated visualizations based on current operational severity.
           </p>
         </section>
       </div>
@@ -143,10 +156,11 @@ function AboutContent() {
   return (
     <section className="card about-page-card">
       <span className="section-kicker">About this project</span>
-      <h2>Transportation Analytics & Network Science</h2>
+      <h2>Real-Time Airport and Flight Delay Risk Platform</h2>
       <p>
-        This project combines live FAA airport advisories, route network data, and custom network impact scoring to
-        explore how hub disruptions may affect the broader U.S. air transportation system.
+        This project combines operational airport delay metrics, supplemental FAA advisories, static route network
+        data, and custom network impact scoring to explore delay propagation, hub vulnerability, and airport network
+        resilience.
       </p>
       <div className="tech-stack">
         <span>React</span>
@@ -170,7 +184,23 @@ function App() {
   const [selectedAirport, setSelectedAirport] = useState(null);
   const [backendMessage, setBackendMessage] = useState(null);
   const [isMethodologyOpen, setIsMethodologyOpen] = useState(false);
-  const [activeView, setActiveView] = useState('welcome');
+  const [activeView, setActiveView] = useState(() => viewFromLocation());
+
+  function navigateToView(view) {
+    setActiveView(view);
+    const targetPath = viewPaths[view] ? `${BASE_PATH}/${viewPaths[view]}` : `${BASE_PATH}/`;
+    if (window.location.pathname !== targetPath) {
+      window.history.pushState(null, '', targetPath);
+    }
+  }
+
+  useEffect(() => {
+    function handlePopState() {
+      setActiveView(viewFromLocation());
+    }
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -247,7 +277,7 @@ function App() {
     if (!enrichedAirports.length) return [];
     return enrichedAirports
       .filter(airport => airport.isDisrupted)
-      .sort((a, b) => b.delayMinutes - a.delayMinutes || (b.hubImpactScore || 0) - (a.hubImpactScore || 0))
+      .sort((a, b) => Math.max(b.departureDelayMinutes || 0, b.arrivalDelayMinutes || 0) - Math.max(a.departureDelayMinutes || 0, a.arrivalDelayMinutes || 0) || (b.hubImpactScore || 0) - (a.hubImpactScore || 0))
       .slice(0, 6);
   }, [enrichedAirports]);
 
@@ -260,9 +290,9 @@ function App() {
     setSelectedAirport(enriched);
   }
 
-  function selectAndNavigate(airport, view = 'detail') {
+  function selectAndNavigate(airport, view = 'dashboard') {
     if (airport) handleAirportSelect(airport);
-    setActiveView(view);
+    navigateToView(view);
   }
 
   const activeHub = data?.hubs?.find(hub => hub.iata === selectedAirportView?.iata)
@@ -279,39 +309,31 @@ function App() {
             <section className="metric-strip" aria-label="Operational overview">
               <div className="metric-card"><span>Monitored airports</span><strong>{data?.allAirports?.length ?? '—'}</strong></div>
               <div className="metric-card"><span>Major hubs</span><strong>{data?.hubs?.length ?? '—'}</strong></div>
-              <div className="metric-card"><span>Disrupted hubs</span><strong className={disruptedHubs.length ? 'text-alert' : ''}>{disruptedHubs.length}</strong></div>
-              <div className="metric-card"><span>Potentially connected</span><strong>{affectedAirports}</strong></div>
+              <div className="metric-card"><span>Elevated-risk hubs</span><strong className={disruptedHubs.length ? 'text-alert' : ''}>{disruptedHubs.length}</strong></div>
+              <div className="metric-card"><span>Network exposure</span><strong>{affectedAirports}</strong></div>
             </section>
-            <section className="dashboard-grid primary-grid">
+            <section className="control-bar">
+              <AirportSearch airports={enrichedAirports} onSelect={airport => selectAndNavigate(airport, 'dashboard')} />
+            </section>
+            <section className="dashboard-grid live-dashboard-grid">
               <div className="card map-card">
                 <MapView
                   airports={enrichedAirports}
                   selectedAirport={selectedAirportView}
                   sourceMode={data?.sourceMode}
-                  onSelect={airport => selectAndNavigate(airport, 'detail')}
+                  onSelect={airport => selectAndNavigate(airport, 'dashboard')}
                 />
               </div>
               <div className="dashboard-side-stack">
                 <div className="card compact-card">
-                  <TopDelays topDelayed={topDelayed} onSelect={airport => selectAndNavigate(airport, 'detail')} />
+                  <AirportDetail airport={selectedAirportView} sourceMode={data?.sourceMode} faaUpdatedAt={data?.faaUpdatedAt} />
                 </div>
                 <div className="card compact-card">
-                  <HubImpact hubs={data?.hubs || []} sourceMode={data?.sourceMode} onSelect={airport => selectAndNavigate(airport, 'network')} />
+                  <TopDelays topDelayed={topDelayed} onSelect={airport => selectAndNavigate(airport, 'dashboard')} />
                 </div>
               </div>
             </section>
           </>
-        );
-      case 'detail':
-        return (
-          <section className="dashboard-grid detail-page-grid">
-            <div>
-              <AirportSearch airports={enrichedAirports} onSelect={airport => selectAndNavigate(airport, 'detail')} />
-            </div>
-            <div className="card">
-              <AirportDetail airport={selectedAirportView} sourceMode={data?.sourceMode} faaUpdatedAt={data?.faaUpdatedAt} />
-            </div>
-          </section>
         );
       case 'network':
         return (
@@ -337,6 +359,9 @@ function App() {
               />
             </div>
             <div className="card">
+              <HubImpact hubs={data?.hubs || []} sourceMode={data?.sourceMode} onSelect={airport => selectAndNavigate(airport, 'network')} />
+            </div>
+            <div className="card">
               <TrendPanel airport={activeHub || selectedAirportView} sourceMode={data?.sourceMode} />
             </div>
           </section>
@@ -347,26 +372,27 @@ function App() {
             airports={enrichedAirports}
             routes={data?.routes || []}
             sourceMode={data?.sourceMode}
-            faaUpdatedAt={data?.faaUpdatedAt}
-          />
-        );
-      case 'methodology':
-        return (
-          <MethodologyContent
-            refreshIntervalMinutes={data?.refreshIntervalMinutes || 5}
-            onOpenModal={() => setIsMethodologyOpen(true)}
+            apiBaseUrl={API_BASE_URL}
           />
         );
       case 'about':
-        return <AboutContent />;
+        return (
+          <>
+            <AboutContent />
+            <MethodologyContent
+              refreshIntervalMinutes={data?.refreshIntervalMinutes || 5}
+              onOpenModal={() => setIsMethodologyOpen(true)}
+            />
+          </>
+        );
       case 'welcome':
       default:
         return (
           <WelcomePage
             sourceMode={data?.sourceMode}
-            onOpenDashboard={() => setActiveView('dashboard')}
-            onViewMethodology={() => setActiveView('methodology')}
-            onExploreNetwork={() => setActiveView('network')}
+            onOpenDashboard={() => navigateToView('dashboard')}
+            onViewMethodology={() => navigateToView('about')}
+            onExploreNetwork={() => navigateToView('network')}
           />
         );
     }
@@ -374,16 +400,16 @@ function App() {
 
   return (
     <div className="dashboard-shell">
-      <Navigation activeView={activeView} setActiveView={setActiveView} />
+      <Navigation activeView={activeView} setActiveView={navigateToView} />
       <div className="content-shell">
         <header className="app-banner">
           <div className="banner-copy">
-            <span className="eyebrow">National Airspace Situational Awareness</span>
+            <span className="eyebrow">GIS / Aviation Analytics Portfolio</span>
             <h1>Hub Resilience Monitor</h1>
             <p>
               {data?.sourceMode === 'live'
-                ? 'Live U.S. airport operational status, hub disruption signals, and estimated downstream network impact.'
-                : 'U.S. airport hub disruption scenarios and estimated downstream network impact.'}
+                ? 'Real-Time Airport and Flight Delay Risk Platform for hub vulnerability, delay propagation, and network resilience.'
+                : 'Sample airport and flight delay risk scenarios for hub vulnerability and network resilience.'}
             </p>
           </div>
           <SourcePanel data={data} />
@@ -394,7 +420,7 @@ function App() {
         </main>
 
         <footer className="app-footer">
-          <span>{data?.notice || 'FAA data shows airport-level operational status, not every individual flight.'}</span>
+          <span>{data?.notice || 'Operational delay risk is estimated; FAA advisories are supplemental context.'}</span>
           <span>Built with React, Leaflet, D3, Node.js/Express, Render, and GitHub Pages.</span>
         </footer>
       </div>

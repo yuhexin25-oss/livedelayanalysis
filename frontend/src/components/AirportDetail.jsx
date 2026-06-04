@@ -23,23 +23,28 @@ export default function AirportDetail({ airport, sourceMode, faaUpdatedAt }) {
           <h2>{airport.iata}</h2>
           <p>{airport.name}</p>
         </div>
-        <span className={`severity-pill severity-${airport.severity}`}>{airport.disruptionType}</span>
+        <span className={`severity-pill severity-${airport.severity}`}>{airport.operationalStatus || airport.disruptionType}</span>
       </div>
       <div className="detail-grid">
-        <div><span>Reported delay</span><strong>{airport.delayMinutes || 0} min</strong></div>
-        <div><span>Impact score</span><strong>{airport.hubImpactScore ?? 'N/A'}</strong></div>
-        <div><span>Connected airports</span><strong>{airport.connectedAirports?.length ?? airport.hubConnectivityScore ?? 'N/A'}</strong></div>
-        <div><span>Major hub</span><strong>{airport.isHub ? 'Yes' : 'No'}</strong></div>
-        <div><span>Severity level</span><strong>{airport.severity}</strong></div>
+        <div><span>Airport Name</span><strong>{airport.name}</strong></div>
+        <div><span>IATA Code</span><strong>{airport.iata}</strong></div>
+        <div><span>FAA Status</span><strong>{airport.faaStatus || airport.status || 'No active advisory'}</strong></div>
+        <div><span>Operational Status</span><strong>{airport.operationalStatus || 'Normal operations'}</strong></div>
+        <div><span>Departure Delay</span><strong>{airport.departureDelayMinutes || 0} min</strong></div>
+        <div><span>Arrival Delay</span><strong>{airport.arrivalDelayMinutes || 0} min</strong></div>
+        <div><span>Cancellation Environment</span><strong>{(((airport.cancellationRate || 0) * 100).toFixed(1))}%</strong></div>
+        <div><span>Hub Status</span><strong>{airport.isHub ? 'Major hub' : 'Non-hub airport'}</strong></div>
+        <div><span>Connected Airports</span><strong>{airport.connectedAirports?.length ?? airport.hubConnectivityScore ?? 'N/A'}</strong></div>
+        <div><span>Impact Score</span><strong>{airport.hubImpactScore ?? 'N/A'} {airport.hubImpactClassification ? `· ${airport.hubImpactClassification}` : ''}</strong></div>
         <div><span>FAA update</span><strong>{formatTime(faaUpdatedAt)}</strong></div>
       </div>
       <div className="advisory-box">
-        <span>{sourceMode === 'live' ? 'FAA airport status advisory' : 'Sample airport status advisory'}</span>
-        <p>{airport.status}</p>
-        <small>Disruption type: {airport.disruptionType}</small>
+        <span>{sourceMode === 'live' ? 'Supplemental FAA airport advisory' : 'Sample supplemental advisory'}</span>
+        <p>{airport.rawFaaAdvisory || airport.faaStatus || airport.status}</p>
+        <small>FAA advisories are supplemental context. Operational delay metrics drive risk scoring.</small>
         {airport.trend && <small>Trend: {airport.trend}</small>}
       </div>
-      <p className="panel-footnote">This is airport-level operational status, not the status of every flight.</p>
+      <p className="panel-footnote">This is airport-level operational risk analysis, not an exact prediction for any individual flight.</p>
     </div>
   );
 }

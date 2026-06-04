@@ -30,11 +30,12 @@ test('parses FAA category-based XML into normalized airport status records', asy
   assert.equal(parsed.faaUpdatedAt, 'Wed Jun 3 02:54:34 2026 GMT');
   assert.deepEqual(parsed.statuses.find(item => item.airportCode === 'DFW').delayRange, { min: 16, max: 30 });
   assert.equal(parsed.statuses.find(item => item.airportCode === 'DFW').weatherDelay, true);
-  assert.equal(parsed.statuses.find(item => item.airportCode === 'LAX').closure, true);
+  assert.equal(parsed.statuses.find(item => item.airportCode === 'LAX').faaClosureAdvisory, true);
+  assert.equal(parsed.statuses.find(item => item.airportCode === 'LAX').closure, false);
 });
 
-test('only assigns downstream impact to disrupted hubs', () => {
-  const data = buildDashboardData({
+test('only assigns downstream impact to disrupted hubs', async () => {
+  const data = await buildDashboardData({
     airports: [
       { iata: 'ATL', name: 'Atlanta', lat: 1, lon: 1 },
       { iata: 'BOS', name: 'Boston', lat: 2, lon: 2 },
@@ -49,6 +50,6 @@ test('only assigns downstream impact to disrupted hubs', () => {
 
   const atl = data.hubs.find(hub => hub.iata === 'ATL');
   assert.equal(atl.affectedAirportsCount, 0);
-  assert.equal(atl.hubImpactScore, 0);
+  assert.equal(atl.hubImpactScore > 0, true);
   assert.equal(atl.hubConnectivityScore, 1);
 });

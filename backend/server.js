@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import statusRouter from './routes/status.js';
-import { getLatestStatus, startStatusRefresh } from './services/statusService.js';
+import { getFlightRiskAssessment, getLatestStatus, startStatusRefresh } from './services/statusService.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -20,6 +20,14 @@ app.use(cors({
 app.use(express.json());
 app.use('/api/status', statusRouter);
 
+app.get('/api/flight-risk/:flightNumber', async (req, res, next) => {
+  try {
+    res.json(await getFlightRiskAssessment(req.params.flightNumber));
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.get('/api/health', (req, res) => {
   const status = getLatestStatus();
   res.json({
@@ -27,6 +35,7 @@ app.get('/api/health', (req, res) => {
     service: 'hub-resilience-monitor-backend',
     sourceMode: status.sourceMode,
     sourceLabel: status.sourceLabel,
+    providerMode: status.providerMode,
     faaUpdatedAt: status.faaUpdatedAt,
     fetchedAt: status.fetchedAt,
   });

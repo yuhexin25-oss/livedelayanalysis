@@ -18,12 +18,12 @@ export default function TrendPanel({ airport, sourceMode }) {
     <div>
       <div className="section-heading">
         <div>
-          <span className="section-kicker">24-hour disruption trend</span>
-          <h2>{airport ? `${airport.iata} Estimated Severity Trend` : 'Estimated Severity Trend'}</h2>
+          <span className="section-kicker">24-hour operational risk trend</span>
+          <h2>{airport ? `${airport.iata} Estimated Risk Trend` : 'Estimated Risk Trend'}</h2>
         </div>
         <span className="count-badge">{sourceMode === 'live' ? 'Live status input' : 'Sample input'}</span>
       </div>
-      <svg className="trend-svg" viewBox="0 0 396 130" role="img" aria-label="Estimated trend visualization based on current disruption severity">
+      <svg className="trend-svg" viewBox="0 0 396 130" role="img" aria-label="Estimated trend visualization based on current operational risk severity">
         <line x1="0" y1="112" x2="396" y2="112" className="trend-axis" />
         <line x1="0" y1="52" x2="396" y2="52" className="trend-gridline" />
         <polyline points={coordinates} className="trend-line" />
@@ -32,7 +32,7 @@ export default function TrendPanel({ airport, sourceMode }) {
         ))}
       </svg>
       <p className="panel-footnote">
-        Estimated trend visualization based on current disruption severity. This is not live historical FAA data.
+        Estimated trend visualization based on current operational severity. This is not live historical flight data.
       </p>
     </div>
   );
