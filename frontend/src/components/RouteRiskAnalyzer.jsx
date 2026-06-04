@@ -9,6 +9,12 @@ function riskLabel(score) {
   return 'Low';
 }
 
+function exposureLabel(score) {
+  if (score >= 50) return 'High';
+  if (score >= 25) return 'Moderate';
+  return 'Low';
+}
+
 function clamp(value, min = 0, max = 100) {
   return Math.min(max, Math.max(min, value));
 }
@@ -27,6 +33,13 @@ function formatDelayPhrase(airport) {
   if (delay >= 30) return 'elevated operational delay conditions';
   if (delay >= 15) return 'moderate operational delay conditions';
   return 'normal commercial operational conditions';
+}
+
+function hasActiveDisruption(airport) {
+  return airportDelay(airport) >= 15
+    || airport?.groundStop
+    || airport?.groundDelayProgram
+    || ['orange', 'red'].includes(airport?.severity);
 }
 
 function routeExists(routes, origin, destination) {
@@ -59,7 +72,7 @@ function buildRouteAssessment({ origin, destination, routes, airports, connectio
     .map(code => airportByCode.get(code))
     .filter(Boolean);
   const highRiskConnections = sharedConnections.filter(airport => (
-    airport.isHub && ((airport.hubImpactScore || 0) >= 50 || ['orange', 'red'].includes(airport.severity))
+    airport.isHub && hasActiveDisruption(airport)
   ));
   const candidateConnections = avoidDisruptedHubs
     ? sharedConnections.filter(airport => !highRiskConnections.some(hub => hub.iata === airport.iata))
@@ -67,40 +80,53 @@ function buildRouteAssessment({ origin, destination, routes, airports, connectio
 
   const originConnectivity = origin.connectedAirports?.length || origin.hubConnectivityScore || connectedCodes(routes, origin.iata).size;
   const destinationConnectivity = destination.connectedAirports?.length || destination.hubConnectivityScore || connectedCodes(routes, destination.iata).size;
-  const networkConnectivityRisk = Math.min(100, Math.round((originConnectivity + destinationConnectivity) * 4));
+  const propagationPotentialScore = Math.min(100, Math.round((originConnectivity + destinationConnectivity) * 4));
   const hubExposureScore = Math.min(100, Math.round(Math.max(origin.hubImpactScore || 0, destination.hubImpactScore || 0, ...sharedConnections.map(airport => airport.hubImpactScore || 0))));
   const groundProgramBonus = origin.groundStop || destination.groundStop ? 25 : origin.groundDelayProgram || destination.groundDelayProgram ? 12 : 0;
   const connectionComplexity = connectionPreference === 'Direct' ? (directRoute ? 4 : 18)
     : connectionPreference === 'One-stop' ? 12
       : directRoute ? 6 : 14;
+  const originDelayMinutes = airportDelay(origin);
+  const destinationDelayMinutes = airportDelay(destination);
+  const currentDisruptionSignal = originDelayMinutes
+    + destinationDelayMinutes
+    + (origin.groundStop || destination.groundStop ? 60 : 0)
+    + (origin.groundDelayProgram || destination.groundDelayProgram ? 30 : 0);
+  const connectivityMultiplier = 1 + Math.min(1, (originConnectivity + destinationConnectivity) / 30);
 
   const originDelayContribution = clamp(Math.round(
-    airportDelay(origin) * 0.28
+    originDelayMinutes * 0.28
     + (origin.cancellationRate || 0) * 90
     + (origin.groundStop ? 10 : origin.groundDelayProgram ? 5 : 0),
   ), 0, 35);
   const destinationDelayContribution = clamp(Math.round(
-    airportDelay(destination) * 0.24
+    destinationDelayMinutes * 0.24
     + (destination.cancellationRate || 0) * 80
     + (destination.groundStop ? 9 : destination.groundDelayProgram ? 4 : 0),
   ), 0, 30);
-  const hubConnectivityContribution = clamp(Math.round(hubExposureScore * 0.22), 0, 24);
-  const networkPropagationContribution = clamp(Math.round(networkConnectivityRisk * 0.16 + connectionComplexity), 0, 24);
+  const hubConnectivityContribution = clamp(Math.round(hubExposureScore * 0.04), 0, 5);
+  const networkPropagationContribution = 0;
+  const currentDisruptionAmplification = currentDisruptionSignal < 15
+    ? clamp(Math.round(currentDisruptionSignal * 0.08), 0, 3)
+    : clamp(Math.round(currentDisruptionSignal * 0.18 * connectivityMultiplier), 0, 30);
   const faaAdvisoryContribution = clamp(groundProgramBonus, 0, 25);
   const routeRiskScore = clamp(
     originDelayContribution
     + destinationDelayContribution
     + hubConnectivityContribution
     + networkPropagationContribution
+    + currentDisruptionAmplification
     + faaAdvisoryContribution,
+    0,
+    currentDisruptionSignal < 15 ? 24 : 100,
   );
   const riskLevel = riskLabel(routeRiskScore);
 
   const reasons = [];
-  reasons.push(`${origin.iata} is ${origin.isHub ? 'a major hub' : 'an airport'} with ${riskLabel(origin.hubImpactScore || 0).toLowerCase()} network exposure.`);
+  reasons.push(`${origin.iata} is ${origin.isHub ? 'a major hub' : 'an airport'} with ${exposureLabel(origin.hubImpactScore || 0).toLowerCase()} static network exposure.`);
   reasons.push(`${destination.iata} currently shows ${destination.operationalStatus || 'normal commercial operational risk'}.`);
   if (originConnectivity + destinationConnectivity >= 16) {
-    reasons.push('Route connects two high-connectivity airports, increasing propagation sensitivity.');
+    reasons.push('Route connects high-connectivity airports, creating propagation potential if operational disruption emerges.');
   }
   if (!directRoute && connectionPreference === 'Direct') {
     reasons.push('A direct connection is not present in the static route network, so direct routing may be limited in this model.');
@@ -130,15 +156,27 @@ function buildRouteAssessment({ origin, destination, routes, airports, connectio
     },
     {
       title: 'Hub Connectivity Exposure',
-      severity: riskLabel(hubConnectivityContribution * 4),
+      label: 'Exposure',
+      severity: exposureLabel(hubExposureScore),
       contribution: hubConnectivityContribution,
-      explanation: `${origin.iata} and ${destination.iata} are evaluated against major hub status and hub impact scores to estimate exposure to broader airport congestion.`,
+      explanation: `${origin.iata} and ${destination.iata} are evaluated against major hub status and hub impact scores. This is static exposure, not active delay risk by itself.`,
     },
     {
-      title: 'Network Propagation Risk',
-      severity: riskLabel(networkPropagationContribution * 4),
+      title: 'Network Propagation Potential',
+      label: 'Potential',
+      severity: exposureLabel(propagationPotentialScore),
       contribution: networkPropagationContribution,
-      explanation: `The selected airports connect to ${originConnectivity + destinationConnectivity} static route-network neighbors, so disruption can affect more downstream airport pairs.`,
+      explanation: currentDisruptionSignal < 15
+        ? 'The selected airports have high propagation potential, but current operational signals are low, so active propagation risk is limited.'
+        : 'These airports are highly connected and could propagate disruption if operational issues emerge.',
+    },
+    {
+      title: 'Current Disruption Amplification',
+      severity: riskLabel(currentDisruptionAmplification * 4),
+      contribution: currentDisruptionAmplification,
+      explanation: currentDisruptionAmplification <= 3
+        ? 'Current origin and destination disruption signals are low, so hub connectivity is not meaningfully amplifying route risk.'
+        : 'Current operational disruption signals are being amplified by hub connectivity and route exposure.',
     },
     {
       title: 'FAA Ground Stop / GDP Advisory',
@@ -152,7 +190,8 @@ function buildRouteAssessment({ origin, destination, routes, airports, connectio
     { label: 'Origin Delay Environment', value: originDelayContribution },
     { label: 'Destination Delay Environment', value: destinationDelayContribution },
     { label: 'Hub Connectivity Exposure', value: hubConnectivityContribution },
-    { label: 'Network Propagation Risk', value: networkPropagationContribution },
+    { label: 'Network Propagation Potential', value: networkPropagationContribution },
+    { label: 'Current Disruption Amplification', value: currentDisruptionAmplification },
     { label: 'FAA Advisory Context', value: faaAdvisoryContribution },
   ];
 
@@ -186,10 +225,10 @@ function buildRouteAssessment({ origin, destination, routes, airports, connectio
     highRiskConnections,
     routeRiskScore,
     riskLevel,
-    originAirportRisk: riskLabel(origin.hubImpactScore || airportDelay(origin)),
-    destinationAirportRisk: riskLabel(destination.hubImpactScore || airportDelay(destination)),
+    originAirportRisk: riskLabel(originDelayContribution * 3),
+    destinationAirportRisk: riskLabel(destinationDelayContribution * 3),
     hubExposureScore,
-    networkConnectivityRisk,
+    propagationPotentialScore,
     recommendations,
     reasons,
     drivers,
@@ -331,7 +370,9 @@ export default function RouteRiskAnalyzer({ airports, routes, providerMode }) {
                       <div className="risk-driver-header">
                         <div>
                           <h4>{driver.title}</h4>
-                          <span className={`risk-level risk-${driver.severity.toLowerCase()}`}>Severity: {driver.severity}</span>
+                          <span className={`risk-level risk-${driver.severity.toLowerCase()}`}>
+                            {driver.label || 'Severity'}: {driver.severity}
+                          </span>
                         </div>
                         <strong>+{driver.contribution}</strong>
                       </div>
@@ -375,15 +416,16 @@ export default function RouteRiskAnalyzer({ airports, routes, providerMode }) {
                 <div><span>Origin Airport Risk</span><strong>{assessment.originAirportRisk}</strong><small>{assessment.origin.iata}</small></div>
                 <div><span>Destination Airport Risk</span><strong>{assessment.destinationAirportRisk}</strong><small>{assessment.destination.iata}</small></div>
                 <div><span>Hub Exposure Score</span><strong>{assessment.hubExposureScore}</strong><small>Endpoint and candidate hub exposure</small></div>
-                <div><span>Network Connectivity Risk</span><strong>{assessment.networkConnectivityRisk}</strong><small>Static route degree sensitivity</small></div>
+                <div><span>Network Propagation Potential</span><strong>{assessment.propagationPotentialScore}</strong><small>Static route exposure, not active risk by itself</small></div>
               </div>
 
               <details className="risk-explainer">
                 <summary>How is this risk estimated?</summary>
                 <p>
                   This score is an analytical estimate based on airport-level operational status, hub connectivity,
-                  route exposure, and FAA advisory context. It is not an official FAA prediction and does not use live
-                  ticket inventory or airline rebooking data.
+                  route exposure, and FAA advisory context. Exposure and potential describe static network structure;
+                  risk describes active operational disruption under current conditions. It is not an official FAA
+                  prediction and does not use live ticket inventory or airline rebooking data.
                 </p>
               </details>
             </>
