@@ -263,7 +263,7 @@ function App() {
     setActiveView(view);
   }
 
-  const activeHub = data?.hubs?.find(hub => hub.iata === selectedAirportView?.iata && hub.isDisrupted)
+  const activeHub = data?.hubs?.find(hub => hub.iata === selectedAirportView?.iata)
     || disruptedHubs[0]
     || data?.hubs?.[0]
     || null;
@@ -315,6 +315,18 @@ function App() {
         return (
           <section className="dashboard-grid network-page-grid">
             <div className="card network-card">
+              <div className="hub-focus-picker" aria-label="Select hub for propagation network">
+                {(data?.hubs || []).map(hub => (
+                  <button
+                    key={hub.iata}
+                    type="button"
+                    className={activeHub?.iata === hub.iata ? 'active' : ''}
+                    onClick={() => handleAirportSelect(hub)}
+                  >
+                    {hub.iata}
+                  </button>
+                ))}
+              </div>
               <NetworkView
                 hubs={data?.hubs || []}
                 airports={enrichedAirports}

@@ -10,8 +10,9 @@ const colors = {
 
 export default function NetworkView({ hubs, airports, selectedAirport, onSelect }) {
   const graph = useMemo(() => {
-    const selectedHub = hubs.find(hub => hub.iata === selectedAirport?.iata && hub.isDisrupted)
+    const selectedHub = hubs.find(hub => hub.iata === selectedAirport?.iata)
       || hubs.find(hub => hub.isDisrupted)
+      || hubs[0]
       || null;
     if (!selectedHub) return { hub: null, nodes: [] };
 
@@ -36,7 +37,7 @@ export default function NetworkView({ hubs, airports, selectedAirport, onSelect 
         {graph.hub && <span className="count-badge">{graph.hub.iata} focus</span>}
       </div>
       {!graph.hub ? (
-        <p className="no-data">No disrupted hub network paths are detected right now.</p>
+        <p className="no-data">No hub network paths are available yet.</p>
       ) : (
         <>
           <svg className="network-svg" viewBox="0 0 560 360" role="img" aria-label={`${graph.hub.iata} connected airport network`}>

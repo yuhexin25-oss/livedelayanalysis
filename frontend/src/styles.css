@@ -527,6 +527,31 @@ h2 { margin: 5px 0 0; font-size: 1.02rem; letter-spacing: -0.02em; }
   white-space: pre-wrap;
 }
 
+.hub-focus-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.hub-focus-picker button {
+  padding: 7px 9px;
+  border: 1px solid #26374a;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.03);
+  color: #92a8c0;
+  cursor: pointer;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.68rem;
+}
+
+.hub-focus-picker button.active,
+.hub-focus-picker button:hover {
+  border-color: #4da3ff;
+  background: rgba(77, 163, 255, 0.12);
+  color: #e8f3ff;
+}
+
 .detail-header {
   display: flex;
   justify-content: space-between;
