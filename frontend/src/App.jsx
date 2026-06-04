@@ -8,7 +8,7 @@ import AirportDetail from './components/AirportDetail.jsx';
 import AirportSearch from './components/AirportSearch.jsx';
 import MethodologyModal from './components/MethodologyModal.jsx';
 import TrendPanel from './components/TrendPanel.jsx';
-import FlightRiskAnalyzer from './components/FlightRiskAnalyzer.jsx';
+import RouteRiskAnalyzer from './components/RouteRiskAnalyzer.jsx';
 import { buildFallbackDashboardData } from './utils/dashboardData.js';
 
 const refreshIntervalMs = 60 * 1000;
@@ -19,7 +19,7 @@ const BASE_PATH = import.meta.env.BASE_URL.replace(/\/$/, '');
 const navigationItems = [
   { id: 'welcome', label: 'Home' },
   { id: 'dashboard', label: 'Live Airport Dashboard' },
-  { id: 'flight-risk', label: 'Flight Risk Checker' },
+  { id: 'route-risk', label: 'Route Risk Analyzer' },
   { id: 'network', label: 'Hub Network Analysis' },
   { id: 'about', label: 'About' },
 ];
@@ -27,7 +27,7 @@ const navigationItems = [
 const viewPaths = {
   welcome: '',
   dashboard: 'dashboard',
-  'flight-risk': 'flight-risk',
+  'route-risk': 'route-risk',
   network: 'network',
   about: 'about',
 };
@@ -79,7 +79,9 @@ function SourcePanel({ data }) {
         {data ? (data.sourceMode === 'live' ? 'Live FAA Backend Connected' : 'Sample Data Mode') : 'Loading dashboard data'}
       </span>
       <span>FAA advisory update: {formatTime(data?.faaUpdatedAt)}</span>
-      <span>Operational provider: {data?.providerMode || 'Not available'}</span>
+      <span>
+        Operational mode: {data?.providerMode === 'flightaware' ? 'FlightAware airport metrics' : 'Airport-level live/estimated operational mode'}
+      </span>
       <span>Dashboard fetch: {formatTime(data?.fetchedAt)}</span>
     </div>
   );
@@ -120,7 +122,9 @@ function MethodologyContent({ refreshIntervalMinutes, onOpenModal }) {
           <h2>Operational Flight-Delay Metrics</h2>
           <p className="page-copy">
             The scoring layer is built around normalized departure delay, arrival delay, cancellation environment,
-            delayed flights, and total flight volume. FlightAware AeroAPI can be plugged in with credentials.
+            The scoring layer focuses on airport network resilience, hub disruption propagation, and route-level
+            operational exposure. FlightAware can remain optional in the backend, but the main experience does not
+            depend on individual flight tracking.
           </p>
         </section>
         <section className="card">
@@ -366,13 +370,12 @@ function App() {
             </div>
           </section>
         );
-      case 'flight-risk':
+      case 'route-risk':
         return (
-          <FlightRiskAnalyzer
+          <RouteRiskAnalyzer
             airports={enrichedAirports}
             routes={data?.routes || []}
-            sourceMode={data?.sourceMode}
-            apiBaseUrl={API_BASE_URL}
+            providerMode={data?.providerMode}
           />
         );
       case 'about':

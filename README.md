@@ -9,7 +9,7 @@ The dashboard is explicit about provenance:
 - **Operational delay metrics** drive severity and Hub Impact Score.
 - **FAA airport advisories** are supplemental context for ground stops, ground delay programs, and operational awareness.
 - **Static route network data** is stored locally in `data/`.
-- **Hub Impact Score and Flight Risk Score** are analytical estimates, not FAA metrics or confirmed flight-delay forecasts.
+- **Hub Impact Score and Route Risk Score** are analytical estimates, not FAA metrics or confirmed flight-delay forecasts.
 - **Fallback status data** is clearly labeled as sample data and is never presented as live.
 
 The project no longer uses FAA NOTAM-style keyword matching such as `CLSD`, `RWY CLSD`, or `AP CLSD` as the primary disruption signal.
@@ -20,7 +20,7 @@ GitHub Pages hosts only the static React frontend. It does not run the Node.js/E
 
 - Welcome and methodology overview
 - Live airport operational risk map using Leaflet
-- Flight Risk Checker for flight numbers such as `DL567`, `AA102`, and `UA2184`
+- Route Delay Risk Analyzer for origin/destination airport pairs
 - Top elevated-risk airports ranking
 - Major hub vulnerability and connectivity analysis
 - Estimated Hub Impact Score with Low / Moderate / High / Critical classes
@@ -63,7 +63,7 @@ The backend listens on `http://localhost:3000` and exposes:
 - `GET /` health message
 - `GET /api/health` JSON health and latest FAA source metadata
 - `GET /api/status` normalized dashboard JSON
-- `GET /api/flight-risk/:flightNumber` estimated flight risk JSON
+- Optional `GET /api/flight-risk/:flightNumber` lookup for future provider-backed integrations; it does not generate synthetic flight routes when FlightAware is inactive
 - `GET /api/provider-test` active provider diagnostics
 
 All backend routes, including errors and unknown routes, return JSON rather than HTML.
@@ -113,7 +113,7 @@ The backend tests cover FAA advisory parsing as supplemental data and operationa
 - Sample fallback operational status: `data/fallback_status.json`
 - GitHub Pages frontend fallback assets: `frontend/public/data/`
 
-FlightAware integration uses:
+FlightAware remains optional. The main user experience is the Route Delay Risk Analyzer and does not require paid flight tracking. If enabled, FlightAware integration uses:
 
 - Airport operational metrics: `GET https://aeroapi.flightaware.com/aeroapi/airports/{ICAO}/flights`
 - Flight number lookup: `GET https://aeroapi.flightaware.com/aeroapi/flights/{ident}`
@@ -124,7 +124,7 @@ A FlightAware AeroAPI key is required. Set it on the backend as:
 FLIGHTAWARE_API_KEY=your_flightaware_aeroapi_key
 ```
 
-The backend sends this key in the `x-apikey` request header. If `FLIGHTAWARE_API_KEY` is missing, invalid, or FlightAware calls fail, the backend keeps using `estimated-operational-metrics` and does not claim FlightAware data.
+The backend sends this key in the `x-apikey` request header. If `FLIGHTAWARE_API_KEY` is missing, invalid, or FlightAware calls fail, the backend keeps using airport-level live/estimated operational mode and does not claim FlightAware data. It also does not infer fake flight-number routes.
 
 Provider verification endpoints:
 

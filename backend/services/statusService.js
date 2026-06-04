@@ -357,8 +357,8 @@ export function getProviderDiagnostics() {
       timestamp: sampleAirport.timestamp,
     } : null,
     message: dataProvider === 'flightaware'
-      ? 'FlightAware AeroAPI is active for airport delay metrics.'
-      : 'FlightAware AeroAPI is not active; backend is using estimated operational metrics.',
+      ? 'FlightAware AeroAPI is active for airport-level delay metrics.'
+      : 'Airport-level live/estimated operational mode is active; FlightAware is optional and not required for the main route analyzer.',
   };
 }
 

@@ -46,31 +46,6 @@ function flightDelayMinutes(flight, phase) {
   );
 }
 
-function fallbackFlightRoute(flightNumber, airports, routes) {
-  const normalized = normalizeFlightNumber(flightNumber);
-  const known = {
-    DL567: { airline: 'Delta Air Lines', origin: 'ATL', destination: 'LAX' },
-    AA102: { airline: 'American Airlines', origin: 'JFK', destination: 'LAX' },
-    UA2184: { airline: 'United Airlines', origin: 'DEN', destination: 'SFO' },
-  };
-  if (known[normalized]) return { flightNumber: normalized, ...known[normalized], provider: 'sample-route-inference' };
-
-  const usableRoutes = routes.filter(route => route.origin && route.destination);
-  const route = usableRoutes[deterministicSeed(normalized) % Math.max(usableRoutes.length, 1)] || { origin: 'ATL', destination: 'LAX' };
-  const airline = normalized.startsWith('DL') ? 'Delta Air Lines'
-    : normalized.startsWith('AA') ? 'American Airlines'
-      : normalized.startsWith('UA') ? 'United Airlines'
-        : 'Unknown airline';
-
-  return {
-    flightNumber: normalized || 'UNKNOWN',
-    airline,
-    origin: route.origin,
-    destination: route.destination,
-    provider: 'sample-route-inference',
-  };
-}
-
 function advisoryForAirport(faaStatusMap, iata) {
   return faaStatusMap.get(iata) || {
     airportCode: iata,
@@ -256,7 +231,7 @@ export function createFlightDataProvider({ airports, routes, faaStatuses = [] })
           console.warn(`[flight-data-provider] AeroAPI flight lookup failed for ${normalized}: ${error.message}`);
         }
       }
-      return fallbackFlightRoute(normalized, airports, routes);
+      throw new Error('Flight lookup requires an active FlightAware provider; no synthetic flight route is generated.');
     },
   };
 }
