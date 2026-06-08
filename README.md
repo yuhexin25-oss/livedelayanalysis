@@ -19,7 +19,7 @@ GitHub Pages hosts only the static React frontend. It does not run the Node.js/E
 ## Features
 
 - Welcome and methodology overview
-- Live airport operational risk map using Leaflet
+- Live airport operational risk globe using MapLibre GL JS
 - Route Delay Risk Analyzer for origin/destination airport pairs
 - Top elevated-risk airports ranking
 - Major hub vulnerability and connectivity analysis

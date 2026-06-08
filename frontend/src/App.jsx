@@ -167,7 +167,7 @@ function AboutContent() {
       </p>
       <div className="tech-stack">
         <span>React</span>
-        <span>Leaflet</span>
+        <span>MapLibre GL</span>
         <span>D3</span>
         <span>Node.js/Express</span>
         <span>Render</span>
@@ -424,7 +424,7 @@ function App() {
 
         <footer className="app-footer">
           <span>{data?.notice || 'Operational delay risk is estimated; FAA advisories are supplemental context.'}</span>
-          <span>Built with React, Leaflet, D3, Node.js/Express, Render, and GitHub Pages.</span>
+          <span>Built with React, MapLibre GL, D3, Node.js/Express, Render, and GitHub Pages.</span>
         </footer>
       </div>
       {isMethodologyOpen && (
