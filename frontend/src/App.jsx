@@ -322,6 +322,7 @@ function App() {
               <div className="card map-card">
                 <MapView
                   airports={enrichedAirports}
+                  routes={data?.routes || []}
                   selectedAirport={selectedAirportView}
                   sourceMode={data?.sourceMode}
                   onSelect={airport => selectAndNavigate(airport, 'dashboard')}
